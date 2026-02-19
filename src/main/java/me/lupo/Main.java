@@ -10,13 +10,16 @@ import java.io.IOException;
 import java.util.List;
 
 public class Main {
-    static String ASCII = "@%#*+=-:. ";
+    static String ASCII = "@%#*+=-:. ";  // Ascii alphabet to use
+    static boolean OUTPUTCOLORS = false; // Whether to use color for the output on the CLI
 
     static void main(String[] args) throws IOException {
         OptionParser parser = new OptionParser();
 
         parser.acceptsAll(List.of("?", "help"), "print this message");
         parser.accepts("img", "The image to use").withRequiredArg().defaultsTo("Silly_Cat_Character_smoll.jpg");
+
+        parser.accepts("color", "Activate color in Terminal output");
 
         parser.acceptsAll(List.of("h", "height"))
                 .withRequiredArg()
@@ -32,6 +35,8 @@ public class Main {
             return;
         }
 
+        OUTPUTCOLORS = options.has("color");
+
         Integer targetWidth = (Integer) options.valueOf("width");
         Integer targetHeight = (Integer) options.valueOf("height");
 
@@ -42,6 +47,9 @@ public class Main {
         // Try loading the image
         try {
             img = ImageIO.read(new File(image_path));
+            if (img == null) {
+                throw new IOException("Unsupported image format :(");
+            }
         } catch (IOException e) {
             throw new IOException("Error Loading image: " + e.getMessage() + " :3");
         }
@@ -52,12 +60,8 @@ public class Main {
 
     }
 
-    // convert a given Value to the corresponding char in the ASCII string
-    private static char getAscii(int rgb) {
-        int r = (rgb >> 16) & 0xff;
-        int g = (rgb >> 8) & 0xff;
-        int b = rgb & 0xff;
-
+    // convert a given rgb value to the corresponding char in the ASCII string
+    private static char getAscii(int r, int g, int b) {
         // Grauwert (einfacher Durchschnitt)
         int gray = (int) (0.299 * r + 0.587 * g + 0.114 * b);
 
@@ -67,6 +71,7 @@ public class Main {
         return ASCII.charAt(index);
     }
 
+    // resizes the image
     private static BufferedImage resize(BufferedImage img, Integer width, Integer height) {
         int originalWidth = img.getWidth();
         int originalHeight = img.getHeight();
@@ -104,9 +109,24 @@ public class Main {
 
         for (int y = 0; y < img.getHeight(); y++) {
             for (int x = 0; x < img.getWidth(); x++) {
-                frame.append(getAscii(img.getRGB(x, y)));
+                int rgb = img.getRGB(x, y);
+                int r = (rgb >> 16) & 0xff;
+                int g = (rgb >> 8) & 0xff;
+                int b = rgb & 0xff;
+
+                char c = getAscii(r, g, b);
+                if (OUTPUTCOLORS) {
+                    frame.append("\u001B[38;2;")
+                            .append(r).append(";")
+                            .append(g).append(";")
+                            .append(b).append("m");
+                }
+                frame.append(c);
             }
-            frame.append('\n');
+            if (OUTPUTCOLORS) {
+                frame.append("\u001B[0m");
+            }
+            frame.append('\n'); // Reset
         }
 
         return frame.toString();

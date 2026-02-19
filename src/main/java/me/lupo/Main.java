@@ -4,22 +4,31 @@ import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 
 import javax.imageio.ImageIO;
+import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
+import java.util.Iterator;
+import java.util.ArrayList;
 
 public class Main {
     static String ASCII = "@%#*+=-:. ";  // Ascii alphabet to use
     static boolean OUTPUTCOLORS = false; // Whether to use color for the output on the CLI
 
-    static void main(String[] args) throws IOException {
+    static void main(String[] args) throws IOException, InterruptedException {
         OptionParser parser = new OptionParser();
 
         parser.acceptsAll(List.of("?", "help"), "print this message");
         parser.accepts("img", "The image to use").withRequiredArg().defaultsTo("Silly_Cat_Character_smoll.jpg");
 
         parser.accepts("color", "Activate color in Terminal output");
+
+        parser.accepts("charset")
+                .withRequiredArg()
+                .defaultsTo("@%#*+=-:. ");
 
         parser.acceptsAll(List.of("h", "height"))
                 .withRequiredArg()
@@ -29,35 +38,50 @@ public class Main {
                 .withRequiredArg()
                 .ofType(Integer.class);
 
+        parser.accepts("fps")
+                .withRequiredArg()
+                .ofType(Integer.class)
+                .defaultsTo(10);
+
         OptionSet options = parser.parse(args);
         if (options.has("help")) {
             IO.println("Usage: java -jar LUPO.jar");
             return;
         }
 
+        ASCII = options.valueOf("charset").toString();
         OUTPUTCOLORS = options.has("color");
+        int fps = (Integer) options.valueOf("fps");
 
         Integer targetWidth = (Integer) options.valueOf("width");
         Integer targetHeight = (Integer) options.valueOf("height");
 
-        BufferedImage img = null;
         String image_path = options.valueOf("img").toString();
         IO.println("Image path: " + image_path);
+        File file = new File(image_path);
 
         // Try loading the image
-        try {
-            img = ImageIO.read(new File(image_path));
+        if (image_path.toLowerCase().endsWith(".gif")) {
+            IO.println("GIF detected :3");
+
+            List<BufferedImage> frames = readGifFrames(file);
+            for (BufferedImage frame : frames) {
+                BufferedImage resized = resize(frame, targetWidth, targetHeight);
+                clearScreen();
+                System.out.print(imageToAsciiConverter(resized));
+                Thread.sleep(1000 / fps);
+            }
+        } else {
+            BufferedImage img = ImageIO.read(file);
+
             if (img == null) {
                 throw new IOException("Unsupported image format :(");
             }
-        } catch (IOException e) {
-            throw new IOException("Error Loading image: " + e.getMessage() + " :3");
-        }
-        IO.println("Loaded Image :3");
-        IO.println("Converting...");
-        BufferedImage resized = resize(img, targetWidth, targetHeight);
-        System.out.println(imageToAsciiConverter(resized));
 
+            BufferedImage resized = resize(img, targetWidth, targetHeight);
+            System.out.println(imageToAsciiConverter(resized));
+        }
+        IO.println("Bye :3");
     }
 
     // convert a given rgb value to the corresponding char in the ASCII string
@@ -84,7 +108,7 @@ public class Main {
 
         if (width != null && height == null) {
             height = (int) (originalHeight * (width / (double) originalWidth) * aspectRatio);
-        } else if (height != null && width == null) {
+        } else if (width == null) {
             width = (int) (originalWidth * (height / (double) originalHeight) / aspectRatio);
         }
 
@@ -93,14 +117,56 @@ public class Main {
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
 
-                int srcX = x * originalWidth / width;
-                int srcY = y * originalHeight / height;
+                int srcX = (int) ((x / (double) width) * originalWidth);
+                int srcY = (int) ((y / (double) height) * originalHeight);
 
                 resized.setRGB(x, y, img.getRGB(srcX, srcY));
             }
         }
 
         return resized;
+    }
+
+    // Utility
+    private static void clearScreen() {
+        System.out.print("\u001B[H\u001B[2J");
+        System.out.flush();
+    }
+
+    private static List<BufferedImage> readGifFrames(File file) throws IOException {
+        List<BufferedImage> frames = new ArrayList<>();
+
+        try (ImageInputStream stream = ImageIO.createImageInputStream(file)) {
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(stream);
+
+            if (!readers.hasNext()) {
+                throw new IOException("No GIF reader found");
+            }
+
+            ImageReader reader = readers.next();
+            reader.setInput(stream);
+
+            int numFrames = reader.getNumImages(true);
+
+            BufferedImage master = new BufferedImage(
+                    reader.getWidth(0),
+                    reader.getHeight(0),
+                    BufferedImage.TYPE_INT_RGB
+            );
+            Graphics g = master.getGraphics();
+            g.setColor(Color.WHITE);
+            g.fillRect(0, 0, master.getWidth(), master.getHeight());
+
+            for (int i = 0; i < numFrames; i++) {
+                BufferedImage frame = reader.read(i);
+                g.drawImage(frame, 0, 0, null); // Overlay
+                BufferedImage copy = new BufferedImage(master.getWidth(), master.getHeight(), BufferedImage.TYPE_INT_RGB);
+                copy.getGraphics().drawImage(master, 0, 0, null);
+                frames.add(copy);
+            }
+        }
+
+        return frames;
     }
 
     // Main entry for Images
@@ -122,6 +188,9 @@ public class Main {
                             .append(b).append("m");
                 }
                 frame.append(c);
+                if (x == 0 && y == 0) {
+                    System.out.println("RGB: " + r + "," + g + "," + b);
+                }
             }
             if (OUTPUTCOLORS) {
                 frame.append("\u001B[0m");

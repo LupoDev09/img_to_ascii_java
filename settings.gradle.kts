@@ -1,0 +1,1 @@
+rootProject.name = "img_to_ascii_java"

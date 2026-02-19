@@ -1,16 +1,19 @@
 package me.lupo;
 
+// Parsing
+
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 
-import javax.imageio.ImageIO;
+// Everything else
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
-import java.util.List;
+import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
+import java.util.List;
 import java.util.Iterator;
 import java.util.ArrayList;
 
@@ -22,9 +25,12 @@ public class Main {
         OptionParser parser = new OptionParser();
 
         parser.acceptsAll(List.of("?", "help"), "print this message");
-        parser.accepts("img", "The image to use").withRequiredArg().defaultsTo("Silly_Cat_Character_smoll.jpg");
 
         parser.accepts("color", "Activate color in Terminal output");
+
+        parser.accepts("img", "The image to use")
+                .withRequiredArg()
+                .defaultsTo("Silly_Cat_Character_smoll.jpg");
 
         parser.accepts("charset")
                 .withRequiredArg()
@@ -45,7 +51,7 @@ public class Main {
 
         OptionSet options = parser.parse(args);
         if (options.has("help")) {
-            IO.println("Usage: java -jar LUPO.jar");
+            parser.printHelpOn(System.out);
             return;
         }
 
@@ -127,20 +133,21 @@ public class Main {
         return resized;
     }
 
-    // Utility
+    // Utility to clear the terminal with ansi stuff
     private static void clearScreen() {
         System.out.print("\u001B[H\u001B[2J");
         System.out.flush();
     }
 
+    // reads GIF Frames from a file (that is hopefully a GIF)
     private static List<BufferedImage> readGifFrames(File file) throws IOException {
-        List<BufferedImage> frames = new ArrayList<>();
+        List<BufferedImage> frames = new ArrayList<>(); // All Frames from the GIF
 
         try (ImageInputStream stream = ImageIO.createImageInputStream(file)) {
             Iterator<ImageReader> readers = ImageIO.getImageReaders(stream);
 
             if (!readers.hasNext()) {
-                throw new IOException("No GIF reader found");
+                throw new IOException("No GIF reader found :(");
             }
 
             ImageReader reader = readers.next();
@@ -171,10 +178,11 @@ public class Main {
 
     // Main entry for Images
     private static String imageToAsciiConverter(BufferedImage img) {
-        StringBuilder frame = new StringBuilder();
+        StringBuilder frame = new StringBuilder(); // the frame ase a whole
 
         for (int y = 0; y < img.getHeight(); y++) {
             for (int x = 0; x < img.getWidth(); x++) {
+                // Get RGB values individually
                 int rgb = img.getRGB(x, y);
                 int r = (rgb >> 16) & 0xff;
                 int g = (rgb >> 8) & 0xff;
@@ -182,6 +190,7 @@ public class Main {
 
                 char c = getAscii(r, g, b);
                 if (OUTPUTCOLORS) {
+                    // Ansi magic
                     frame.append("\u001B[38;2;")
                             .append(r).append(";")
                             .append(g).append(";")
@@ -193,9 +202,9 @@ public class Main {
                 }
             }
             if (OUTPUTCOLORS) {
-                frame.append("\u001B[0m");
+                frame.append("\u001B[0m"); // Reset
             }
-            frame.append('\n'); // Reset
+            frame.append('\n'); // Newline for the next line
         }
 
         return frame.toString();

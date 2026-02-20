@@ -21,7 +21,7 @@ public class Main {
     static String ASCII = "@%#*+=-:. ";  // Ascii alphabet to use
     static boolean OUTPUTCOLORS = false; // Whether to use color for the output on the CLI
 
-    static void main(String[] args) throws IOException, InterruptedException {
+    static void main(String[] args) throws IOException {
         OptionParser parser = new OptionParser();
 
         parser.acceptsAll(List.of("?", "help"), "print this message");
@@ -50,8 +50,13 @@ public class Main {
                 .defaultsTo(10);
 
         OptionSet options = parser.parse(args);
-        if (options.has("help")) {
-            parser.printHelpOn(System.out);
+        try {
+            if (options.has("help")) {
+                parser.printHelpOn(System.out);
+                return;
+            }
+        } catch (IOException e) {
+            IO.println("Something went wrong while printing help. How da fuck?");
             return;
         }
 
@@ -70,12 +75,41 @@ public class Main {
         if (image_path.toLowerCase().endsWith(".gif")) {
             IO.println("GIF detected :3");
 
-            List<BufferedImage> frames = readGifFrames(file);
+
+            List<BufferedImage> frames = new ArrayList<>();
+            try {
+                frames = readGifFrames(file); // Raw Frames
+            } catch (IOException e){
+                IO.println("Something went wrong reading gif Frames: " + e.getMessage());
+                return;
+            }
+            List<String> framesOut = new ArrayList<>();       // Output Frames
+
+            // Preprocess frames
             for (BufferedImage frame : frames) {
                 BufferedImage resized = resize(frame, targetWidth, targetHeight);
-                clearScreen();
-                System.out.print(imageToAsciiConverter(resized));
-                Thread.sleep(1000 / fps);
+                String ascii = imageToAsciiConverter(resized);
+                framesOut.add(ascii);
+            }
+
+            // Render frames
+            long frameTime = 1000 / fps;
+            try{
+                IO.println("\033[?25l"); // Hide Cursor
+                for (String frame : framesOut) {
+                    long start = System.currentTimeMillis();
+
+                    clearScreen();
+                    System.out.println(frame);
+
+                    long elapsed = System.currentTimeMillis() - start;
+                    Thread.sleep(Math.max(0, frameTime - elapsed));
+                }
+            } catch (Exception e){
+                IO.println("Error While rendering frame: " + e.getMessage());
+            } finally {
+                IO.println("\033[?25h"); // Show cursor
+                System.out.flush();
             }
         } else {
             BufferedImage img = ImageIO.read(file);
@@ -135,7 +169,7 @@ public class Main {
 
     // Utility to clear the terminal with ansi stuff
     private static void clearScreen() {
-        System.out.print("\u001B[H\u001B[2J");
+        System.out.print("\033[H");
         System.out.flush();
     }
 
@@ -197,9 +231,6 @@ public class Main {
                             .append(b).append("m");
                 }
                 frame.append(c);
-                if (x == 0 && y == 0) {
-                    System.out.println("RGB: " + r + "," + g + "," + b);
-                }
             }
             if (OUTPUTCOLORS) {
                 frame.append("\u001B[0m"); // Reset

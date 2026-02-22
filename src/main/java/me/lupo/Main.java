@@ -1,7 +1,6 @@
 package me.lupo;
 
 // Parsing
-
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 

@@ -37,11 +37,13 @@ public class Main {
 
         parser.acceptsAll(List.of("h", "height"))
                 .withRequiredArg()
-                .ofType(Integer.class);
+                .ofType(Integer.class)
+                .defaultsTo(45);
 
         parser.acceptsAll(List.of("w", "width"))
                 .withRequiredArg()
-                .ofType(Integer.class);
+                .ofType(Integer.class)
+                .defaultsTo(200);
 
         parser.accepts("fps")
                 .withRequiredArg()

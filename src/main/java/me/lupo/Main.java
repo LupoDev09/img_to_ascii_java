@@ -8,6 +8,7 @@ import joptsimple.OptionSet;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
@@ -17,8 +18,9 @@ import java.util.Iterator;
 import java.util.ArrayList;
 
 public class Main {
-    static String ASCII = "@%#*+=-:. ";  // Ascii alphabet to use
-    static boolean OUTPUTCOLORS = false; // Whether to use color for the output on the CLI
+    static String ASCII_ALPHABET = "@%#*+=-:. ";  // Ascii alphabet to use
+    static boolean OUTPUT_COLORS = false; // Whether to use color for the output on the CLI
+    static boolean DEBUG = false; // Whether to print debug information (like the parsed options, the target width and height, etc.)
 
     static void main(String[] args) throws IOException {
         OptionParser parser = new OptionParser();
@@ -26,6 +28,7 @@ public class Main {
         parser.acceptsAll(List.of("?", "help"), "print this message");
 
         parser.accepts("color", "Activate color in Terminal output");
+        parser.acceptsAll(List.of("verbose", "v", "debug", "d"), "Generate debug information");
 
         parser.accepts("img", "The image to use")
                 .withRequiredArg()
@@ -51,8 +54,14 @@ public class Main {
                 .defaultsTo(10);
 
         OptionSet options = parser.parse(args);
+        if (options.has("verbose")) {
+            DEBUG = true;
+        }
+        printDebugInfo("Parsed options: " + options.asMap());
+
         try {
             if (options.has("help")) {
+                printDebugInfo("Help requested, printing help and exiting.");
                 parser.printHelpOn(System.out);
                 return;
             }
@@ -61,23 +70,31 @@ public class Main {
             return;
         }
 
-        ASCII = options.valueOf("charset").toString();
-        OUTPUTCOLORS = options.has("color");
+        ASCII_ALPHABET = options.valueOf("charset").toString();
+        OUTPUT_COLORS = options.has("color");
+        printDebugInfo("Using charset: " + ASCII_ALPHABET);
+        printDebugInfo("Output colors: " + ((OUTPUT_COLORS) ? "ON" : "OFF"));
+
         int fps = (Integer) options.valueOf("fps");
 
         Integer targetWidth = (Integer) options.valueOf("width");
         Integer targetHeight = (Integer) options.valueOf("height");
+        printDebugInfo("Target width: " + targetWidth);
+        printDebugInfo("Target height: " + targetHeight);
 
         String image_path = options.valueOf("img").toString();
-        IO.println("Image path: " + image_path);
+        printDebugInfo("Image path: " + image_path);
         File file = new File(image_path);
+        if (!file.exists()) {
+            throw new FileNotFoundException("File not found: " + image_path);
+        }
 
         // Try loading the image
         if (image_path.toLowerCase().endsWith(".gif")) {
+            printDebugInfo("FPS: " + fps);
             IO.println("GIF detected :3");
 
-
-            List<BufferedImage> frames = new ArrayList<>();
+            List<BufferedImage> frames;
             try {
                 frames = readGifFrames(file); // Raw Frames
             } catch (IOException e){
@@ -92,19 +109,22 @@ public class Main {
                 String ascii = imageToAsciiConverter(resized);
                 framesOut.add(ascii);
             }
+            printDebugInfo("Frames: " + framesOut.size());
 
             // Render frames
             long frameTime = 1000 / fps;
+            printDebugInfo("Frame time: " + frameTime + "ms");
             try{
                 IO.println("\033[?25l"); // Hide Cursor
                 for (String frame : framesOut) {
-                    long start = System.currentTimeMillis();
+                    long start = System.currentTimeMillis(); // Start time
 
+                    // Do operations
                     clearScreen();
                     System.out.println(frame);
 
-                    long elapsed = System.currentTimeMillis() - start;
-                    Thread.sleep(Math.max(0, frameTime - elapsed));
+                    long elapsed = System.currentTimeMillis() - start; // Elapsed time in ms
+                    Thread.sleep(Math.max(0, frameTime - elapsed)); // Sleep the time between the elapsed time and the frame time
                 }
             } catch (Exception e){
                 IO.println("Error While rendering frame: " + e.getMessage());
@@ -113,6 +133,7 @@ public class Main {
                 System.out.flush();
             }
         } else {
+            printDebugInfo("Image detected :3");
             BufferedImage img = ImageIO.read(file);
 
             if (img == null) {
@@ -125,19 +146,29 @@ public class Main {
         IO.println("Bye :3");
     }
 
+    // Prints debug information if DEBUG is enabled
+    private static void printDebugInfo(String message) {
+        if (DEBUG) {
+            System.out.println("[DEBUG] " + message);
+        }
+    }
+
     // convert a given rgb value to the corresponding char in the ASCII string
     private static char getAscii(int r, int g, int b) {
         // Grauwert (einfacher Durchschnitt)
         int gray = (int) (0.299 * r + 0.587 * g + 0.114 * b);
 
         // Map auf ASCII
-        int index = (gray * (ASCII.length() - 1)) / 255;
+        int index = (gray * (ASCII_ALPHABET.length() - 1)) / 255;
 
-        return ASCII.charAt(index);
+        return ASCII_ALPHABET.charAt(index);
     }
 
     // resizes the image
-    private static BufferedImage resize(BufferedImage img, Integer width, Integer height) {
+    private static BufferedImage resize(BufferedImage img, Integer width, Integer height) throws IllegalArgumentException {
+        if (img == null) {
+            throw new IllegalArgumentException("Image must not be null");
+        }
         int originalWidth = img.getWidth();
         int originalHeight = img.getHeight();
 
@@ -145,7 +176,7 @@ public class Main {
             return img; // kein scaling
         }
 
-        double aspectRatio = 0.5; // ASCII correction
+        double aspectRatio = 0.5; // ASCII correction (modify if needed)
 
         if (width != null && height == null) {
             height = (int) (originalHeight * (width / (double) originalWidth) * aspectRatio);
@@ -224,7 +255,7 @@ public class Main {
                 int b = rgb & 0xff;
 
                 char c = getAscii(r, g, b);
-                if (OUTPUTCOLORS) {
+                if (OUTPUT_COLORS) {
                     // Ansi magic
                     frame.append("\u001B[38;2;")
                             .append(r).append(";")
@@ -233,7 +264,7 @@ public class Main {
                 }
                 frame.append(c);
             }
-            if (OUTPUTCOLORS) {
+            if (OUTPUT_COLORS) {
                 frame.append("\u001B[0m"); // Reset
             }
             frame.append('\n'); // Newline for the next line

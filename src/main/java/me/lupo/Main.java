@@ -22,7 +22,7 @@ public class Main {
     static boolean OUTPUT_COLORS = false; // Whether to use color for the output on the CLI
     static boolean DEBUG = false; // Whether to print debug information (like the parsed options, the target width and height, etc.)
 
-    static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws IOException {
         OptionParser parser = new OptionParser();
 
         parser.acceptsAll(List.of("?", "help"), "print this message");
@@ -66,7 +66,7 @@ public class Main {
                 return;
             }
         } catch (IOException e) {
-            IO.println("Something went wrong while printing help. How da fuck?");
+            System.out.println("Something went wrong while printing help. How da fuck?");
             return;
         }
 
@@ -90,18 +90,18 @@ public class Main {
         }
 
         // Try loading the image
-        if (image_path.toLowerCase().endsWith(".gif")) {
+        if (checkIfGif(file)) {
             printDebugInfo("FPS: " + fps);
-            IO.println("GIF detected :3");
+            System.out.println("GIF detected :3");
 
             List<BufferedImage> frames;
             try {
                 frames = readGifFrames(file); // Raw Frames
             } catch (IOException e){
-                IO.println("Something went wrong reading gif Frames: " + e.getMessage());
+                System.out.println("Something went wrong reading gif Frames: " + e.getMessage());
                 return;
             }
-            List<String> framesOut = new ArrayList<>();       // Output Frames
+            List<String> framesOut = new ArrayList<>(); // Output Frames
 
             // Preprocess frames
             for (BufferedImage frame : frames) {
@@ -115,7 +115,7 @@ public class Main {
             long frameTime = 1000 / fps;
             printDebugInfo("Frame time: " + frameTime + "ms");
             try{
-                IO.println("\033[?25l"); // Hide Cursor
+                System.out.println("\033[?25l"); // Hide Cursor
                 for (String frame : framesOut) {
                     long start = System.currentTimeMillis(); // Start time
 
@@ -127,9 +127,9 @@ public class Main {
                     Thread.sleep(Math.max(0, frameTime - elapsed)); // Sleep the time between the elapsed time and the frame time
                 }
             } catch (Exception e){
-                IO.println("Error While rendering frame: " + e.getMessage());
+                System.out.println("Error While rendering frame: " + e.getMessage());
             } finally {
-                IO.println("\033[?25h"); // Show cursor
+                System.out.println("\033[?25h"); // Show cursor
                 System.out.flush();
             }
         } else {
@@ -143,7 +143,7 @@ public class Main {
             BufferedImage resized = resize(img, targetWidth, targetHeight);
             System.out.println(imageToAsciiConverter(resized));
         }
-        IO.println("Bye :3");
+        System.out.println("Bye :3");
     }
 
     // Prints debug information if DEBUG is enabled
@@ -271,5 +271,22 @@ public class Main {
         }
 
         return frame.toString();
+    }
+
+    private static boolean checkIfGif(File file) {
+        printDebugInfo("Checking if file is a GIF: " + file.getAbsolutePath());
+        try (ImageInputStream stream = ImageIO.createImageInputStream(file)) {
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(stream);
+            if (!readers.hasNext()) {
+                printDebugInfo("No image readers found for this file. Assuming this file is not a GIF.");
+                return false; // No reader found, not a valid image
+            }
+            ImageReader reader = readers.next();
+            return reader.getFormatName().equalsIgnoreCase("gif");
+        } catch (IOException e) {
+            printDebugInfo("IOException while checking if " + file.getAbsolutePath() + " is a GIF: " + e.getMessage());
+            printDebugInfo("Assuming this file is not a GIF due to the error.");
+            return false; // Error reading the file, treat as not a GIF
+        }
     }
 }

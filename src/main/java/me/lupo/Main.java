@@ -24,10 +24,10 @@ public class Main {
     private static final String[] MockArguments = new String[] {
             "--log-level", "ERROR",
             "--image", "funny.gif",
-            "--no-output",
             "--height", "124"
     };
 
+    // TODO: Add Audio Support
     static void main(String[] args) {
         try {
             log.setColor(false);
@@ -105,24 +105,36 @@ public class Main {
 
             String charset = options.valueOf("charset").toString();
             Renderer renderer = new Renderer(log.isColor(), charset);
+
+            /*
+             * TODO: Replace the current way to load and render frames with some sort of a onFrame callback
+             *  and an output thread To save on Memory
+             */
             LoadResult frames = FFmpegLoader.load(imgPath.getAbsolutePath(), targetWidth, targetHeight);
             ArrayList<String> rendered_frames = renderer.renderFrames(frames.frames());
-
             try (CursorGuard _ = new CursorGuard()) {// Clear the Console before writing frames to it
                 if (!no_output) IO.print(CLEAR_CONSOLE);
 
                 // Render output frames one by one
+                long frameTime = Math.round(1_000_000_000.0 / frames.fps()); // nanoseconds
+                long lastTime = System.nanoTime();
+
                 for (int i = 0; i < rendered_frames.size(); i++) {
                     String rendered_frame = rendered_frames.get(i);
                     if (!no_output) {
-                        IO.print(rendered_frame);
+                        long now = System.nanoTime();
 
-                        // Nur löschen, wenn noch ein Frame danach kommt
-                        if (i != rendered_frames.size() - 1) {
-                            IO.print(CURSOR_HOME);
+                        if (now - lastTime >= frameTime) {
+                            IO.print(rendered_frame);
+
+                            // Nur löschen, wenn noch ein Frame danach kommt
+                            if (i != rendered_frames.size() - 1) {
+                                IO.print(CURSOR_HOME);
+                            }
+                            lastTime += frameTime;
+                        } else {
+                            Thread.sleep(1); // CPU entlasten
                         }
-
-                        Thread.sleep((long) (1000.0 / frames.fps()));
                     }
                 }
             }

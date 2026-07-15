@@ -2,244 +2,173 @@ package me.lupo;
 
 import org.jetbrains.annotations.NotNull;
 
-import java.util.concurrent.BlockingQueue;
+import java.io.PrintStream;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
-public class Logger extends Thread {
-    private static Logger instance;
+/**
+ * Thread-sichere Singleton-Logger-Klasse mit verschiedenen Leveln.
+ * Verwendung: Logger.getInstance().info("Nachricht");
+ */
+public final class Logger {
 
-    private Logger(LogLevel level) {
-        this.logLevel = level;
-        this.logQueue = new java.util.concurrent.LinkedBlockingQueue<>();
-        this.running = true;
-    }
-
-    public enum LogLevel {
+    /**
+     * Verfügbare Log-Level, aufsteigend nach Schweregrad.
+     */
+    public enum Level {
+        DEBUG,
         INFO,
         WARN,
-        ERROR
+        ERROR,
+        FATAL
     }
 
-    private static class LogMessage {
-        String message;
-        LogLevel logLevel;
+    // Singleton-Instanz
+    private static final Logger INSTANCE = new Logger();
 
-        LogMessage(String message, LogLevel logLevel) {
-            this.message = message;
-            this.logLevel = logLevel;
-        }
-    }
+    // Aktuelles Log-Level – volatile für Sichtbarkeit über Threads hinweg
+    private volatile Level currentLevel = Level.INFO;
 
-    private LogLevel logLevel;
-    private final BlockingQueue<LogMessage> logQueue;
-    private boolean running;
-    private static final LogMessage POISON_PILL = new LogMessage("", null);
+    // Synchronisations-Objekt für atomare Ausgabe
+    private final Object writeLock = new Object();
 
-    private boolean color;
-    private static final String RESET = "\033[0m";   // setzt Farbe zurück
-    private static final String GREEN = "\033[32m";  // INFO
-    private static final String YELLOW = "\033[33m"; // WARN
-    private static final String RED = "\033[31m";    // ERROR
+    // Datumsformat für Zeitstempel
+    private final DateTimeFormatter dateFormatter =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 
-    // ========================
-    // Singleton
-    // ========================
+    // Ausgabekanäle (können bei Bedarf umkonfiguriert werden)
+    private final PrintStream out = System.out;
+    private final PrintStream err = System.err;
+
+    private boolean useColor = true; // Flag für Farbunterstützung
+
+    private static final String RESET_COLOR = "\u001B[0m"; // ANSI Reset
+    private static final String DEBUG_COLOR = "\u001B[34m"; // Blau
+    private static final String INFO_COLOR = "\u001B[32m";  // Grün
+    private static final String WARN_COLOR = "\u001B[33m";  // Gelb
+    private static final String ERROR_COLOR = "\u001B[31m"; // Rot
+    private static final String FATAL_COLOR = "\u001B[35m"; // Magenta
+
+    // Privater Konstruktor verhindert externe Instanziierung
+    private Logger() {}
 
     /**
-     * Constructs a Logger with the level 'level'
-     * @param level the level a message has to have to be printed
+     * Liefert die einzige Instanz des Loggers.
      */
-    public static synchronized void init(LogLevel level, boolean color) {
-        if (instance != null) {
-            throw new IllegalStateException("Logger wurde noch nicht initialisiert!");
-        }
-        instance = new Logger(level);
-        instance.color = color;
-        instance.start();
-    }
-
-    /**
-     * Returns the singleton instance of the Logger
-     * @return the singleton instance of the Logger
-     */
-    public static synchronized Logger getInstance() {
-        if (instance == null) {
-            throw new IllegalStateException("Logger wurde noch nicht initialisiert!");
-            // verhindert, dass man ihn benutzt bevor main ihn erstellt
-        }
-        return instance;
+    public static Logger getInstance() {
+        return INSTANCE;
     }
 
     /**
-     * Stops the logger thread and waits for it to finish
+     * Setzt das aktuelle Log-Level. Nachrichten mit einem niedrigeren Level
+     * werden ignoriert.
      */
-    public void stopLogger() {
-        this.running = false;
-        this.logQueue.add(POISON_PILL); // fügt ein spezielles Element hinzu, um den Thread zu stoppen
-        try {
-            this.join();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+    public void setLevel(Level level) {
+        this.currentLevel = level;
+    }
+
+    /**
+     * Gibt das aktuelle Log-Level zurück.
+     */
+    public Level getLevel() {
+        return currentLevel;
+    }
+
+    /**
+     * Zentrale Log-Methode. Schreibt die Nachricht nur, wenn das übergebene Level
+     * größer oder gleich dem aktuellen Level ist.
+     */
+    private void log(@NotNull Level level, String message) {
+        if (level.ordinal() < currentLevel.ordinal()) {
+            return;
+        }
+        String timestamp = LocalDateTime.now().format(dateFormatter);
+        String line = String.format("%s [%s] %s", timestamp, level, message);
+        // Je nach Schweregrad auf out oder err ausgeben
+        PrintStream target = (level == Level.ERROR || level == Level.FATAL) ? err : out;
+        synchronized (writeLock) {
+            if (useColor) {
+                target.print(getColorString(level));
+            }
+            target.println(line);
+            if (useColor) {
+                target.print(RESET_COLOR);
+            }
         }
     }
 
-    // ==========================
-    // Setter and getter
-    // ==========================
+    // --- Convenience-Methoden für die einzelnen Level ---
 
-    public LogLevel getLogLevel() {
-        return logLevel;
+    public void debug(String msg) {
+        log(Level.DEBUG, msg);
     }
 
-    public synchronized void setLogLevel(LogLevel logLevel) {
-        this.logLevel = logLevel;
+    public void info(String msg) {
+        log(Level.INFO, msg);
+    }
+
+    public void warn(String msg) {
+        log(Level.WARN, msg);
+    }
+
+    public void error(String msg) {
+        log(Level.ERROR, msg);
+    }
+
+    public void fatal(String msg) {
+        log(Level.FATAL, msg);
+    }
+
+    public void debug(String format, Object... args) {
+        log(Level.DEBUG, String.format(format, args));
+    }
+
+    public void info(String format, Object... args) {
+        log(Level.INFO, String.format(format, args));
+    }
+
+    public void warn(String format, Object... args) {
+        log(Level.WARN, String.format(format, args));
+    }
+
+    public void error(String format, Object... args) {
+        log(Level.ERROR, String.format(format, args));
+    }
+
+    public void fatal(String format, Object... args) {
+        log(Level.FATAL, String.format(format, args));
+    }
+
+    /**
+     * Spezielle Methode für Fehler mit Exception (stacktrace auf stderr).
+     */
+    public void error(String msg, Throwable t) {
+        if (Level.ERROR.ordinal() < currentLevel.ordinal()) {
+            return;
+        }
+        String timestamp = LocalDateTime.now().format(dateFormatter);
+        synchronized (writeLock) {
+            err.printf("%s [ERROR] %s%n", timestamp, msg);
+            t.printStackTrace(err);
+        }
+    }
+
+
+    public void setColor(boolean b) {
+        useColor = b;
     }
 
     public boolean isColor() {
-        return color;
+        return useColor;
     }
 
-    public synchronized void setColor(boolean Color) {
-        this.color = Color;
-    }
-
-    // ==========================
-    // Log at different loglevels
-    // ==========================
-
-    /**
-     * Logs a message at loglevel INFO
-     * @param message the message to log
-     */
-    public void info(String message) {
-        logQueue.add(new LogMessage(message, LogLevel.INFO));
-    }
-
-    /**
-     * Logs a message at loglevel WARN
-     * @param message the message to log
-     */
-    public void warn(String message) {
-        logQueue.add(new LogMessage(message, LogLevel.WARN));
-    }
-
-    /**
-     * Logs a message at loglevel ERROR
-     * @param message the message to log
-     */
-    public void error(String message) {
-        logQueue.add(new LogMessage(message, LogLevel.ERROR));
-    }
-
-    /**
-     * Logs a formated message at loglevel INFO
-     * @param message the message to log
-     * @param args the arguments for the message
-     */
-    public void info(String message, Object... args) {
-        String formatted = String.format(message, args);
-        logQueue.add(new LogMessage(formatted, LogLevel.INFO));
-    }
-
-    /**
-     * Logs a formated message at loglevel Warn
-     * @param message the message to log
-     * @param args the arguments for the message
-     */
-    public void warn(String message, Object... args) {
-        String formatted = String.format(message, args);
-        logQueue.add(new LogMessage(formatted, LogLevel.WARN));
-    }
-
-    /**
-     * Logs a formated message at loglevel Error
-     * @param message the message to log
-     * @param args the arguments for the message
-     */
-    public void error(String message, Object... args) {
-        String formatted = String.format(message, args);
-        logQueue.add(new LogMessage(formatted, LogLevel.ERROR));
-    }
-
-    /**
-     * Logs a formated message at loglevel Error with a Throwable
-     * @param message the message to log
-     * @param t the Throwable to log
-     * @param args the arguments for the message
-     */
-    public void error(String message, Throwable t, Object... args) {
-        String formatted = String.format(message, args);
-        // add statt add -> wirft keine Exception wenn Queue voll wäre
-        logQueue.add(new LogMessage(
-                formatted + "\n" + getStackTrace(t),
-                LogLevel.ERROR
-        ));
-    }
-
-    /**
-     * returns a Stacktrace as a String
-     * @param t the Throwable to get the stack trace for
-     * @return the stack trace as a String
-     */
-    private String getStackTrace(@NotNull Throwable t) {
-        java.io.StringWriter sw = new java.io.StringWriter();
-        java.io.PrintWriter pw = new java.io.PrintWriter(sw);
-        t.printStackTrace(pw);
-        return sw.toString();
-    }
-
-
-    // ========================
-    // Threading stuff
-    // ========================
-
-    @Override
-    public void run() {
-        try {
-            while (running || !logQueue.isEmpty()) {
-                // Läuft bis running false ist und die logQueue lehr
-
-                LogMessage msg = logQueue.take(); // blockiert, bis ein Element verfügbar ist
-
-                if (msg == POISON_PILL) {
-                    break;
-                }
-
-                // Die LogMessage-Objekte werden nur ausgegeben, wenn ihr LogLevel größer oder gleich dem Logger-LogLevel ist
-                if (msg.logLevel.ordinal() >= logLevel.ordinal()) {
-                    if (color) {
-                        switch (msg.logLevel) {
-                            case INFO:
-                                System.out.print(GREEN);
-                                break;
-                            case WARN:
-                                System.out.print(YELLOW);
-                                break;
-                            case ERROR:
-                                System.out.print(RED);
-                                break;
-                        }
-                    }
-
-                    String time = java.time.LocalTime.now().toString();
-
-                    System.out.println("[" + time + "] [" + msg.logLevel + "] " + msg.message);
-                    if (color) {
-                        System.out.print(RESET);
-                    }
-                }
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            // Interrupt-Handling
-        }
-    }
-
-    @Override
-    public String toString() {
-        return "Logger{" +
-                "logLevel=" + logLevel +
-                ", logQueue=" + logQueue.toString() +
-                ", color=" + color +
-                '}';
+    private String getColorString(@NotNull Level level) {
+        return switch (level) {
+            case DEBUG -> DEBUG_COLOR; // Blau
+            case INFO -> INFO_COLOR;  // Grün
+            case WARN -> WARN_COLOR;  // Gelb
+            case ERROR -> ERROR_COLOR; // Rot
+            case FATAL -> FATAL_COLOR; // Magenta
+        };
     }
 }

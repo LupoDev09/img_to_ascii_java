@@ -8,15 +8,15 @@ import joptsimple.OptionSet;
 import java.awt.*;
 import java.io.File;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.List;
 
 public class Main {
     private static OptionParser parser;
+    private static final Logger log = Logger.getInstance();
+
     public static void main(String[] args) {
         try {
-            Logger.init(Logger.LogLevel.INFO, true);
-            Logger.getInstance().info("Logger initialized. " + Logger.getInstance().toString());
+            log.info("Logger initialized. " + Logger.getInstance().toString());
 
             parser = new OptionParser();
 
@@ -52,12 +52,12 @@ public class Main {
             OptionSet options = parser.parse(args);
             try {
                 if (options.has("help")) {
-                    Logger.getInstance().info("Help requested, printing help and exiting.");
+                    log.info("Help requested, printing help and exiting.");
                     parser.printHelpOn(System.out);
                     return;
                 }
             } catch (IOException e) {
-                Logger.getInstance().error("Something went wrong while printing help. How da fuck? %s", e.getMessage());
+                log.error("Something went wrong while printing help. How da fuck? %s", e.getMessage());
                 return;
             }
 
@@ -65,71 +65,63 @@ public class Main {
                 String value = options.valueOf("log-level").toString();
                 value = value.toUpperCase();
                 try {
-                    Logger.getInstance().setLogLevel(Logger.LogLevel.valueOf(value));
-                    Logger.getInstance().info("Log level set to: %s", value);
+                    log.setLevel(Logger.Level.valueOf(value));
+                    log.info("Log level set to: %s", value);
                 } catch (IllegalArgumentException e) {
-                    Logger.getInstance().error("Invalid log level: %s", value);
+                    log.error("Invalid log level: %s", value);
                     System.exit(1);
                 }
             }
-            Logger.getInstance().info("Parsed options: %s", options.asMap());
+            log.info("Parsed options: %s", options.asMap());
 
 
             File imgPath;
             if (!options.has("image")) {
-                Logger.getInstance().error("No input image provided. Use --image <path> to specify an image.");
+                log.error("No input image provided. Use --image <path> to specify an image.");
                 parser.printHelpOn(System.out);
                 return;
             } else {
                 imgPath = new File(options.valueOf("image").toString());
                 if (!imgPath.exists()) {
-                    Logger.getInstance().error("Specified image path does not exist: %s", imgPath.getAbsolutePath());
+                    log.error("Specified image path does not exist: %s", imgPath.getAbsolutePath());
                     parser.printHelpOn(System.out);
                     return;
                 }
-                Logger.getInstance().info("Input image path: %s", imgPath.getAbsolutePath());
+                log.info("Input image path: %s", imgPath.getAbsolutePath());
             }
 
             if (options.has("no-color")) {
-                Logger.getInstance().info("No color mode activated.");
-                Logger.getInstance().setColor(false);
+                log.info("No color mode activated.");
+                log.setColor(false);
             }
 
             Integer width, height;
             width = (Integer) options.valueOf("width");
             height = (Integer) options.valueOf("height");
-            Logger.getInstance().info("Width: %d, Height: %d", width, height);
+            log.info("Width: %d, Height: %d", width, height);
             if (width < 0) {
-                Logger.getInstance().error("Width cannot be negative: %d", width);
+                log.error("Width cannot be negative: %d", width);
                 parser.printHelpOn(System.out);
                 return;
             } else if (height < 0) {
-                Logger.getInstance().error("Height cannot be negative: %d", height);
+                log.error("Height cannot be negative: %d", height);
                 parser.printHelpOn(System.out);
                 return;
             }
 
             String charset = options.valueOf("charset").toString();
         } catch (joptsimple.OptionException e) {
-            Logger.getInstance().error("Missing required options");
+            log.error("Missing required options");
             try {
                 parser.printHelpOn(System.out);
             } catch (IOException ioException) {
-                Logger.getInstance().error("Something went wrong while printing help. How da fuck? %s", ioException.getMessage());
+                log.error("Something went wrong while printing help. How da fuck? %s", ioException.getMessage());
             }
         }
         catch (Exception e) {
-            if (Logger.getInstance() != null) {
-                Logger.getInstance().error("An unexpected error occurred. %s", e.getMessage());
-            } else {
-                System.err.println("An unexpected error occurred: " + e.getMessage());
-                System.err.println(Arrays.toString(e.getStackTrace()));
-            }
+            log.error("An unexpected error occurred. %s", e.getMessage());
         } finally {
-            if (Logger.getInstance() != null) {
-                Logger.getInstance().info("Bye :3");
-                Logger.getInstance().stopLogger();
-            }
+            log.info("Bye :3");
         }
     }
 }

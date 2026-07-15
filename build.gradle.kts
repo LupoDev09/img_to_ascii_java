@@ -8,6 +8,7 @@ version = "1.0.0"
 
 application {
     mainClass.set("me.lupo.Main")
+    applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
 }
 
 repositories {

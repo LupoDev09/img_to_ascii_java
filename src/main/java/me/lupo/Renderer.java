@@ -1,7 +1,9 @@
 package me.lupo;
 
-import java.awt.*;
+import org.jetbrains.annotations.NotNull;
+
 import java.awt.image.BufferedImage;
+import java.util.ArrayList;
 
 public class Renderer {
     private final Logger log = Logger.getInstance();
@@ -11,6 +13,7 @@ public class Renderer {
     }
 
     private final Config config;
+    private static final String RESET_COLOR = "\u001B[0m";
 
     Renderer(boolean useColor, String charset) {
         this.config = new Config();
@@ -54,7 +57,7 @@ public class Renderer {
                             .append(g).append(";")
                             .append(b).append("m")
                             .append(pixelChar)
-                            .append("\u001B[0m");
+                            .append(RESET_COLOR);
                 } else {
                     result.append(pixelChar);
                 }
@@ -63,6 +66,16 @@ public class Renderer {
         }
 
         return result.toString();
+    }
+
+    public ArrayList<String> renderFrames(@NotNull ArrayList<BufferedImage> imgs) {
+        log.debug("Render frames got called with %d images", imgs.size());
+        ArrayList<String> renderedFrames = new ArrayList<>();
+
+        for (BufferedImage img : imgs) {
+            renderedFrames.add(renderFrame(img));
+        }
+        return renderedFrames;
     }
 
     /**

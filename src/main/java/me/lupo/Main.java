@@ -4,63 +4,34 @@ package me.lupo;
 import joptsimple.OptionException;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
+import org.jetbrains.annotations.NotNull;
 
 // Everything else
-import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 public class Main {
-    private static OptionParser parser;
+    private static final String CLEAR_CONSOLE = "\033[2J\033[H";
+    private static final String CURSOR_HOME = "\033[H";
+
+    private static final OptionParser parser = setParser();
 
     private static final Logger log = Logger.getInstance();
 
     private static final boolean MockArgs = true;
     private static final String[] MockArguments = new String[] {
-            "--log-level", "debug",
-            "--image", "Silly_Cat_Character_smoll.jpg",
-            "--width", "0",
-            "--height", "50"
+            "--log-level", "ERROR",
+            "--image", "funny.gif",
+            "--no-output",
+            "--height", "124"
     };
 
-    public static void main(String[] args) {
+    static void main(String[] args) {
         try {
             log.setColor(false);
             log.info("Logger initialized. " + Logger.getInstance());
-
-            parser = new OptionParser();
-
-            parser.acceptsAll(List.of("?", "help"), "print this message");
-            parser.accepts("no-color", "Deactivate color in Terminal output");
-            parser.accepts("no-audio", "Deactivate audio");
-
-            parser.accepts("log-level", "Set log level (debug, info, warn, error)")
-                    .withRequiredArg()
-                    .ofType(String.class);
-
-            parser.acceptsAll(List.of("img", "image", "input", "i"), "Path to the input image")
-                    .withRequiredArg()
-                    .ofType(String.class)
-                    .required();
-            parser.acceptsAll(List.of("width", "w"), "Width of the output ASCII art 0 = auto")
-                    .withRequiredArg()
-                    .ofType(Integer.class)
-                    .defaultsTo(0);
-            parser.acceptsAll(List.of("height", "h"), "Height of the output ASCII art 0 = auto")
-                    .withRequiredArg()
-                    .ofType(Integer.class)
-                    .defaultsTo(0);
-            parser.acceptsAll(List.of("c", "charset"), "Charset for the output ASCII art")
-                    .withRequiredArg()
-                    .ofType(String.class)
-                    .defaultsTo(" ░▒▓█");
-
-            parser.acceptsAll(List.of("fps", "frames-per-second"), "Frames per second for the output ASCII art")
-                    .withRequiredArg()
-                    .ofType(Integer.class);
-
-            parser.accepts("no-output", "Disable output to console, useful for benchmarking");
 
             OptionSet options;
             if (!MockArgs) {
@@ -69,7 +40,7 @@ public class Main {
                 options = parser.parse(MockArguments);
             }
 
-            log.info("Parsed options: %s", options.asMap());
+            log.debug("Parsed options: %s", options.asMap());
             try {
                 if (options.has("help")) {
                     log.info("Help requested, printing help and exiting.");
@@ -82,11 +53,11 @@ public class Main {
             }
 
             if (options.has("no-color")) {
-                log.info("No color mode activated.");
+                log.debug("No color mode activated.");
                 log.setColor(false);
             } else {
                 log.setColor(true);
-                log.info("Color mode activated");
+                log.debug("Color mode activated");
             }
 
             if (options.has("log-level")) {
@@ -103,9 +74,9 @@ public class Main {
 
             boolean no_output = options.has("no-output");
             if (no_output) {
-                log.info("No output mode activated.");
+                log.debug("No output mode activated.");
             } else {
-                log.info("Output mode activated.");
+                log.debug("Output mode activated.");
             }
 
             File imgPath;
@@ -120,51 +91,41 @@ public class Main {
                     parser.printHelpOn(System.out);
                     return;
                 }
-                log.info("Input image path: %s", imgPath.getAbsolutePath());
+                log.debug("Input image path: %s", imgPath.getAbsolutePath());
             }
 
-            Integer target_width, target_height;
-            target_width = (Integer) options.valueOf("width");
-            target_height = (Integer) options.valueOf("height");
-            log.info("Width: %d, Height: %d", target_width, target_height);
-            if (target_width == 0 && target_height == 0) {
-                log.error("It can't be both width and height null");
-                parser.printHelpOn(System.out);
-                return;
-            }
+            int targetWidth = (int) options.valueOf("width");
+            int targetHeight = (int) options.valueOf("height");
+            log.debug("Width: %d, Height: %d", targetWidth, targetHeight);
 
-            if (target_width < 0) {
-                log.error("Width cannot be negative: %d", target_width);
-                parser.printHelpOn(System.out);
+            if (targetWidth < 0 || targetHeight < 0) {
+                log.error("Width and height cannot be negative");
                 return;
-            } else if (target_height < 0) {
-                log.error("Height cannot be negative: %d", target_height);
-                parser.printHelpOn(System.out);
-                return;
-            }
-
-
-            int width = 0, height = 0;
-            double aspect = (double) target_width / target_height;
-            if (target_width == 0) {
-                width = (int) (target_height * aspect); // Breite berechnen
-            } else if (target_height == 0) {
-                height = (int) (target_width / aspect); // Höhe berechnen
-            } else {
-                width = target_width;
-                height = target_height;
             }
 
             String charset = options.valueOf("charset").toString();
             Renderer renderer = new Renderer(log.isColor(), charset);
-            BufferedImage frame = FFmpegLoader.load(imgPath.getAbsolutePath(), width, height);
-            String rendered = renderer.renderFrame(frame);
-            if (!no_output) {
-                log.info("Rendered frame outputting it");
-                IO.print(rendered);
-                log.info("Rendered frame outputted");
-            }
+            LoadResult frames = FFmpegLoader.load(imgPath.getAbsolutePath(), targetWidth, targetHeight);
+            ArrayList<String> rendered_frames = renderer.renderFrames(frames.frames());
 
+            try (CursorGuard _ = new CursorGuard()) {// Clear the Console before writing frames to it
+                if (!no_output) IO.print(CLEAR_CONSOLE);
+
+                // Render output frames one by one
+                for (int i = 0; i < rendered_frames.size(); i++) {
+                    String rendered_frame = rendered_frames.get(i);
+                    if (!no_output) {
+                        IO.print(rendered_frame);
+
+                        // Nur löschen, wenn noch ein Frame danach kommt
+                        if (i != rendered_frames.size() - 1) {
+                            IO.print(CURSOR_HOME);
+                        }
+
+                        Thread.sleep((long) (1000.0 / frames.fps()));
+                    }
+                }
+            }
         } catch (OptionException e) {
             log.error("Missing required options");
             try {
@@ -174,9 +135,41 @@ public class Main {
             }
         }
         catch (Exception e) {
-            log.error("An unexpected error occurred. %s", e.getMessage());
+            log.error("Unexpected error: %s", e);
         } finally {
             log.info("Bye :3");
         }
+    }
+
+    private static @NotNull OptionParser setParser() {
+        OptionParser parser = new OptionParser();
+        parser.acceptsAll(List.of("?", "help"), "print this message");
+        parser.accepts("no-color", "Deactivate color in Terminal output");
+        parser.accepts("no-audio", "Deactivate audio");
+
+        parser.accepts("log-level", "Set log level (debug, info, warn, error)")
+                .withRequiredArg()
+                .ofType(String.class);
+
+        parser.acceptsAll(List.of("img", "image", "input", "i"), "Path to the input image")
+                .withRequiredArg()
+                .ofType(String.class)
+                .required();
+        parser.acceptsAll(List.of("width", "w"), "Width of the output ASCII art 0 = auto")
+                .withRequiredArg()
+                .ofType(Integer.class)
+                .defaultsTo(0);
+        parser.acceptsAll(List.of("height", "h"), "Height of the output ASCII art 0 = auto")
+                .withRequiredArg()
+                .ofType(Integer.class)
+                .defaultsTo(0);
+        parser.acceptsAll(List.of("c", "charset"), "Charset for the output ASCII art")
+                .withRequiredArg()
+                .ofType(String.class)
+                .defaultsTo(" ░▒▓█");
+
+        parser.accepts("no-output", "Disable output to console, useful for benchmarking");
+
+        return parser;
     }
 }

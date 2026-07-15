@@ -6,287 +6,89 @@ import joptsimple.OptionSet;
 
 // Everything else
 import java.awt.*;
-import java.awt.image.BufferedImage;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import javax.imageio.ImageIO;
-import javax.imageio.ImageReader;
-import javax.imageio.stream.ImageInputStream;
+import java.util.Arrays;
 import java.util.List;
-import java.util.Iterator;
-import java.util.ArrayList;
 
 public class Main {
-    static String ASCII_ALPHABET = "@%#*+=-:. ";  // Ascii alphabet to use
-    static boolean OUTPUT_COLORS = false; // Whether to use color for the output on the CLI
-    static boolean DEBUG = false; // Whether to print debug information (like the parsed options, the target width and height, etc.)
-
-    public static void main(String[] args) throws IOException {
-        OptionParser parser = new OptionParser();
-
-        parser.acceptsAll(List.of("?", "help"), "print this message");
-
-        parser.accepts("color", "Activate color in Terminal output");
-        parser.acceptsAll(List.of("verbose", "v", "debug", "d"), "Generate debug information");
-
-        parser.accepts("img", "The image to use")
-                .withRequiredArg()
-                .defaultsTo("Silly_Cat_Character_smoll.jpg");
-
-        parser.accepts("charset")
-                .withRequiredArg()
-                .defaultsTo("@%#*+=-:. ");
-
-        parser.acceptsAll(List.of("h", "height"))
-                .withRequiredArg()
-                .ofType(Integer.class)
-                .defaultsTo(45);
-
-        parser.acceptsAll(List.of("w", "width"))
-                .withRequiredArg()
-                .ofType(Integer.class)
-                .defaultsTo(200);
-
-        parser.accepts("fps")
-                .withRequiredArg()
-                .ofType(Integer.class)
-                .defaultsTo(10);
-
-        OptionSet options = parser.parse(args);
-        if (options.has("verbose")) {
-            DEBUG = true;
-        }
-        printDebugInfo("Parsed options: " + options.asMap());
-
+    public static void main(String[] args) {
         try {
-            if (options.has("help")) {
-                printDebugInfo("Help requested, printing help and exiting.");
+            Logger.init(Logger.LogLevel.INFO, true);
+            Logger.getInstance().info("Logger initialized. " + Logger.getInstance().toString());
+
+            OptionParser parser = new OptionParser();
+
+            parser.acceptsAll(List.of("?", "help"), "print this message");
+            parser.accepts("no-color", "Deactivate color in Terminal output");
+
+            parser.accepts("log-level", "Set log level (debug, info, warn, error)")
+                    .withRequiredArg()
+                    .ofType(String.class);
+            parser.acceptsAll(List.of("img", "image", "input", "i"), "Path to the input image")
+                    .withRequiredArg()
+                    .ofType(String.class);
+
+
+            OptionSet options = parser.parse(args);
+            try {
+                if (options.has("help")) {
+                    Logger.getInstance().info("Help requested, printing help and exiting.");
+                    parser.printHelpOn(System.out);
+                    return;
+                }
+            } catch (IOException e) {
+                Logger.getInstance().error("Something went wrong while printing help. How da fuck?", e);
+                return;
+            }
+
+            if (options.has("log-level")) {
+                String value = options.valueOf("log-level").toString();
+                value = value.toUpperCase();
+                try {
+                    Logger.getInstance().setLogLevel(Logger.LogLevel.valueOf(value));
+                    Logger.getInstance().info("Log level set to: {}", value);
+                } catch (IllegalArgumentException e) {
+                    Logger.getInstance().error("Invalid log level: {}", value);
+                    System.exit(1);
+                }
+            }
+            Logger.getInstance().info("Parsed options: {}", options.asMap());
+
+
+            File imgPath;
+            if (!options.has("image")) {
+                Logger.getInstance().error("No input image provided. Use --image <path> to specify an image.");
                 parser.printHelpOn(System.out);
                 return;
-            }
-        } catch (IOException e) {
-            System.out.println("Something went wrong while printing help. How da fuck?");
-            return;
-        }
-
-        ASCII_ALPHABET = options.valueOf("charset").toString();
-        OUTPUT_COLORS = options.has("color");
-        printDebugInfo("Using charset: " + ASCII_ALPHABET);
-        printDebugInfo("Output colors: " + ((OUTPUT_COLORS) ? "ON" : "OFF"));
-
-        int fps = (Integer) options.valueOf("fps");
-
-        Integer targetWidth = (Integer) options.valueOf("width");
-        Integer targetHeight = (Integer) options.valueOf("height");
-        printDebugInfo("Target width: " + targetWidth);
-        printDebugInfo("Target height: " + targetHeight);
-
-        String image_path = options.valueOf("img").toString();
-        printDebugInfo("Image path: " + image_path);
-        File file = new File(image_path);
-        if (!file.exists()) {
-            throw new FileNotFoundException("File not found: " + image_path);
-        }
-
-        // Try loading the image
-        if (checkIfGif(file)) {
-            printDebugInfo("FPS: " + fps);
-            System.out.println("GIF detected :3");
-
-            List<BufferedImage> frames;
-            try {
-                frames = readGifFrames(file); // Raw Frames
-            } catch (IOException e){
-                System.out.println("Something went wrong reading gif Frames: " + e.getMessage());
-                return;
-            }
-            List<String> framesOut = new ArrayList<>(); // Output Frames
-
-            // Preprocess frames
-            for (BufferedImage frame : frames) {
-                BufferedImage resized = resize(frame, targetWidth, targetHeight);
-                String ascii = imageToAsciiConverter(resized);
-                framesOut.add(ascii);
-            }
-            printDebugInfo("Frames: " + framesOut.size());
-
-            // Render frames
-            long frameTime = 1000 / fps;
-            printDebugInfo("Frame time: " + frameTime + "ms");
-            try{
-                System.out.println("\033[?25l"); // Hide Cursor
-                for (String frame : framesOut) {
-                    long start = System.currentTimeMillis(); // Start time
-
-                    // Do operations
-                    clearScreen();
-                    System.out.println(frame);
-
-                    long elapsed = System.currentTimeMillis() - start; // Elapsed time in ms
-                    Thread.sleep(Math.max(0, frameTime - elapsed)); // Sleep the time between the elapsed time and the frame time
+            } else {
+                imgPath = new File(options.valueOf("image").toString());
+                if (!imgPath.exists()) {
+                    Logger.getInstance().error("Specified image path does not exist: {}", imgPath);
+                    parser.printHelpOn(System.out);
+                    return;
                 }
-            } catch (Exception e){
-                System.out.println("Error While rendering frame: " + e.getMessage());
-            } finally {
-                System.out.println("\033[?25h"); // Show cursor
-                System.out.flush();
-            }
-        } else {
-            printDebugInfo("Image detected :3");
-            BufferedImage img = ImageIO.read(file);
-
-            if (img == null) {
-                throw new IOException("Unsupported image format :(");
+                Logger.getInstance().info("Input image path: {}", imgPath);
             }
 
-            BufferedImage resized = resize(img, targetWidth, targetHeight);
-            System.out.println(imageToAsciiConverter(resized));
-        }
-        System.out.println("Bye :3");
-    }
-
-    // Prints debug information if DEBUG is enabled
-    private static void printDebugInfo(String message) {
-        if (DEBUG) {
-            System.out.println("[DEBUG] " + message);
-        }
-    }
-
-    // convert a given rgb value to the corresponding char in the ASCII string
-    private static char getAscii(int r, int g, int b) {
-        // Grauwert (einfacher Durchschnitt)
-        int gray = (int) (0.299 * r + 0.587 * g + 0.114 * b);
-
-        // Map auf ASCII
-        int index = (gray * (ASCII_ALPHABET.length() - 1)) / 255;
-
-        return ASCII_ALPHABET.charAt(index);
-    }
-
-    // resizes the image
-    private static BufferedImage resize(BufferedImage img, Integer width, Integer height) throws IllegalArgumentException {
-        if (img == null) {
-            throw new IllegalArgumentException("Image must not be null");
-        }
-        int originalWidth = img.getWidth();
-        int originalHeight = img.getHeight();
-
-        if (width == null && height == null) {
-            return img; // kein scaling
-        }
-
-        double aspectRatio = 0.5; // ASCII correction (modify if needed)
-
-        if (width != null && height == null) {
-            height = (int) (originalHeight * (width / (double) originalWidth) * aspectRatio);
-        } else if (width == null) {
-            width = (int) (originalWidth * (height / (double) originalHeight) / aspectRatio);
-        }
-
-        BufferedImage resized = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-
-                int srcX = (int) ((x / (double) width) * originalWidth);
-                int srcY = (int) ((y / (double) height) * originalHeight);
-
-                resized.setRGB(x, y, img.getRGB(srcX, srcY));
-            }
-        }
-
-        return resized;
-    }
-
-    // Utility to clear the terminal with ansi stuff
-    private static void clearScreen() {
-        System.out.print("\033[H");
-        System.out.flush();
-    }
-
-    // reads GIF Frames from a file (that is hopefully a GIF)
-    private static List<BufferedImage> readGifFrames(File file) throws IOException {
-        List<BufferedImage> frames = new ArrayList<>(); // All Frames from the GIF
-
-        try (ImageInputStream stream = ImageIO.createImageInputStream(file)) {
-            Iterator<ImageReader> readers = ImageIO.getImageReaders(stream);
-
-            if (!readers.hasNext()) {
-                throw new IOException("No GIF reader found :(");
+            if (options.has("no-color")) {
+                Logger.getInstance().info("No color mode activated.");
+                Logger.getInstance().setColor(false);
             }
 
-            ImageReader reader = readers.next();
-            reader.setInput(stream);
 
-            int numFrames = reader.getNumImages(true);
-
-            BufferedImage master = new BufferedImage(
-                    reader.getWidth(0),
-                    reader.getHeight(0),
-                    BufferedImage.TYPE_INT_RGB
-            );
-            Graphics g = master.getGraphics();
-            g.setColor(Color.WHITE);
-            g.fillRect(0, 0, master.getWidth(), master.getHeight());
-
-            for (int i = 0; i < numFrames; i++) {
-                BufferedImage frame = reader.read(i);
-                g.drawImage(frame, 0, 0, null); // Overlay
-                BufferedImage copy = new BufferedImage(master.getWidth(), master.getHeight(), BufferedImage.TYPE_INT_RGB);
-                copy.getGraphics().drawImage(master, 0, 0, null);
-                frames.add(copy);
+        } catch (Exception e) {
+            if (Logger.getInstance() != null) {
+                Logger.getInstance().error("An unexpected error occurred.", e);
+            } else {
+                System.err.println("An unexpected error occurred: " + e.getMessage());
+                System.err.println(Arrays.toString(e.getStackTrace()));
             }
-        }
-
-        return frames;
-    }
-
-    // Main entry for Images
-    private static String imageToAsciiConverter(BufferedImage img) {
-        StringBuilder frame = new StringBuilder(); // the frame ase a whole
-
-        for (int y = 0; y < img.getHeight(); y++) {
-            for (int x = 0; x < img.getWidth(); x++) {
-                // Get RGB values individually
-                int rgb = img.getRGB(x, y);
-                int r = (rgb >> 16) & 0xff;
-                int g = (rgb >> 8) & 0xff;
-                int b = rgb & 0xff;
-
-                char c = getAscii(r, g, b);
-                if (OUTPUT_COLORS) {
-                    // Ansi magic
-                    frame.append("\u001B[38;2;")
-                            .append(r).append(";")
-                            .append(g).append(";")
-                            .append(b).append("m");
-                }
-                frame.append(c);
+        } finally {
+            if (Logger.getInstance() != null) {
+                Logger.getInstance().info("Bye :3");
+                Logger.getInstance().stopLogger();
             }
-            if (OUTPUT_COLORS) {
-                frame.append("\u001B[0m"); // Reset
-            }
-            frame.append('\n'); // Newline for the next line
-        }
-
-        return frame.toString();
-    }
-
-    private static boolean checkIfGif(File file) {
-        printDebugInfo("Checking if file is a GIF: " + file.getAbsolutePath());
-        try (ImageInputStream stream = ImageIO.createImageInputStream(file)) {
-            Iterator<ImageReader> readers = ImageIO.getImageReaders(stream);
-            if (!readers.hasNext()) {
-                printDebugInfo("No image readers found for this file. Assuming this file is not a GIF.");
-                return false; // No reader found, not a valid image
-            }
-            ImageReader reader = readers.next();
-            return reader.getFormatName().equalsIgnoreCase("gif");
-        } catch (IOException e) {
-            printDebugInfo("IOException while checking if " + file.getAbsolutePath() + " is a GIF: " + e.getMessage());
-            printDebugInfo("Assuming this file is not a GIF due to the error.");
-            return false; // Error reading the file, treat as not a GIF
         }
     }
 }

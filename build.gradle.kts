@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "me.lupo"
-version = "1.0-SNAPSHOT"
+version = "1.0.0"
 
 application {
     mainClass.set("me.lupo.Main")
@@ -16,6 +16,7 @@ repositories {
 
 dependencies {
     implementation("net.sf.jopt-simple:jopt-simple:5.0.4") // For arg parsing
+    implementation("org.jetbrains:annotations:24.1.0") // For annotations
 
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")

@@ -12,23 +12,42 @@ import java.util.Arrays;
 import java.util.List;
 
 public class Main {
+    private static OptionParser parser;
     public static void main(String[] args) {
         try {
             Logger.init(Logger.LogLevel.INFO, true);
             Logger.getInstance().info("Logger initialized. " + Logger.getInstance().toString());
 
-            OptionParser parser = new OptionParser();
+            parser = new OptionParser();
 
             parser.acceptsAll(List.of("?", "help"), "print this message");
             parser.accepts("no-color", "Deactivate color in Terminal output");
+            parser.accepts("no-audio", "Deactivate audio");
 
             parser.accepts("log-level", "Set log level (debug, info, warn, error)")
                     .withRequiredArg()
                     .ofType(String.class);
+
             parser.acceptsAll(List.of("img", "image", "input", "i"), "Path to the input image")
                     .withRequiredArg()
-                    .ofType(String.class);
+                    .ofType(String.class)
+                    .required();
+            parser.acceptsAll(List.of("width", "w"), "Width of the output ASCII art 0 = auto")
+                    .withRequiredArg()
+                    .ofType(Integer.class)
+                    .defaultsTo(0);
+            parser.acceptsAll(List.of("height", "h"), "Height of the output ASCII art 0 = auto")
+                    .withRequiredArg()
+                    .ofType(Integer.class)
+                    .defaultsTo(0);
+            parser.acceptsAll(List.of("c", "charset"), "Charset for the output ASCII art")
+                    .withRequiredArg()
+                    .ofType(String.class)
+                    .defaultsTo(" ░▒▓█");
 
+            parser.acceptsAll(List.of("fps", "frames-per-second"), "Frames per second for the output ASCII art")
+                    .withRequiredArg()
+                    .ofType(Integer.class);
 
             OptionSet options = parser.parse(args);
             try {
@@ -38,7 +57,7 @@ public class Main {
                     return;
                 }
             } catch (IOException e) {
-                Logger.getInstance().error("Something went wrong while printing help. How da fuck?", e);
+                Logger.getInstance().error("Something went wrong while printing help. How da fuck? %s", e.getMessage());
                 return;
             }
 
@@ -47,13 +66,13 @@ public class Main {
                 value = value.toUpperCase();
                 try {
                     Logger.getInstance().setLogLevel(Logger.LogLevel.valueOf(value));
-                    Logger.getInstance().info("Log level set to: {}", value);
+                    Logger.getInstance().info("Log level set to: %s", value);
                 } catch (IllegalArgumentException e) {
-                    Logger.getInstance().error("Invalid log level: {}", value);
+                    Logger.getInstance().error("Invalid log level: %s", value);
                     System.exit(1);
                 }
             }
-            Logger.getInstance().info("Parsed options: {}", options.asMap());
+            Logger.getInstance().info("Parsed options: %s", options.asMap());
 
 
             File imgPath;
@@ -64,11 +83,11 @@ public class Main {
             } else {
                 imgPath = new File(options.valueOf("image").toString());
                 if (!imgPath.exists()) {
-                    Logger.getInstance().error("Specified image path does not exist: {}", imgPath);
+                    Logger.getInstance().error("Specified image path does not exist: %s", imgPath.getAbsolutePath());
                     parser.printHelpOn(System.out);
                     return;
                 }
-                Logger.getInstance().info("Input image path: {}", imgPath);
+                Logger.getInstance().info("Input image path: %s", imgPath.getAbsolutePath());
             }
 
             if (options.has("no-color")) {
@@ -76,10 +95,32 @@ public class Main {
                 Logger.getInstance().setColor(false);
             }
 
+            Integer width, height;
+            width = (Integer) options.valueOf("width");
+            height = (Integer) options.valueOf("height");
+            Logger.getInstance().info("Width: %d, Height: %d", width, height);
+            if (width < 0) {
+                Logger.getInstance().error("Width cannot be negative: %d", width);
+                parser.printHelpOn(System.out);
+                return;
+            } else if (height < 0) {
+                Logger.getInstance().error("Height cannot be negative: %d", height);
+                parser.printHelpOn(System.out);
+                return;
+            }
 
-        } catch (Exception e) {
+            String charset = options.valueOf("charset").toString();
+        } catch (joptsimple.OptionException e) {
+            Logger.getInstance().error("Missing required options");
+            try {
+                parser.printHelpOn(System.out);
+            } catch (IOException ioException) {
+                Logger.getInstance().error("Something went wrong while printing help. How da fuck? %s", ioException.getMessage());
+            }
+        }
+        catch (Exception e) {
             if (Logger.getInstance() != null) {
-                Logger.getInstance().error("An unexpected error occurred.", e);
+                Logger.getInstance().error("An unexpected error occurred. %s", e.getMessage());
             } else {
                 System.err.println("An unexpected error occurred: " + e.getMessage());
                 System.err.println(Arrays.toString(e.getStackTrace()));

@@ -171,4 +171,13 @@ public final class Logger {
             case FATAL -> FATAL_COLOR; // Magenta
         };
     }
+
+    @Override
+    public String toString() {
+        return "Logger{" +
+                "currentLevel=" + currentLevel +
+                ", useColor=" + useColor +
+                ", dateFormatter=" + dateFormatter.format(LocalDateTime.now()) +
+                '}';
+    }
 }

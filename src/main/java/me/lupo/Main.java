@@ -1,22 +1,33 @@
 package me.lupo;
 
 // Parsing
+import joptsimple.OptionException;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 
 // Everything else
-import java.awt.*;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
 public class Main {
     private static OptionParser parser;
+
     private static final Logger log = Logger.getInstance();
+
+    private static final boolean MockArgs = true;
+    private static final String[] MockArguments = new String[] {
+            "--log-level", "debug",
+            "--image", "Silly_Cat_Character_smoll.jpg",
+            "--width", "0",
+            "--height", "50"
+    };
 
     public static void main(String[] args) {
         try {
-            log.info("Logger initialized. " + Logger.getInstance().toString());
+            log.setColor(false);
+            log.info("Logger initialized. " + Logger.getInstance());
 
             parser = new OptionParser();
 
@@ -49,7 +60,16 @@ public class Main {
                     .withRequiredArg()
                     .ofType(Integer.class);
 
-            OptionSet options = parser.parse(args);
+            parser.accepts("no-output", "Disable output to console, useful for benchmarking");
+
+            OptionSet options;
+            if (!MockArgs) {
+                options = parser.parse(args);
+            } else {
+                options = parser.parse(MockArguments);
+            }
+
+            log.info("Parsed options: %s", options.asMap());
             try {
                 if (options.has("help")) {
                     log.info("Help requested, printing help and exiting.");
@@ -59,6 +79,14 @@ public class Main {
             } catch (IOException e) {
                 log.error("Something went wrong while printing help. How da fuck? %s", e.getMessage());
                 return;
+            }
+
+            if (options.has("no-color")) {
+                log.info("No color mode activated.");
+                log.setColor(false);
+            } else {
+                log.setColor(true);
+                log.info("Color mode activated");
             }
 
             if (options.has("log-level")) {
@@ -72,8 +100,13 @@ public class Main {
                     System.exit(1);
                 }
             }
-            log.info("Parsed options: %s", options.asMap());
 
+            boolean no_output = options.has("no-output");
+            if (no_output) {
+                log.info("No output mode activated.");
+            } else {
+                log.info("Output mode activated.");
+            }
 
             File imgPath;
             if (!options.has("image")) {
@@ -90,27 +123,49 @@ public class Main {
                 log.info("Input image path: %s", imgPath.getAbsolutePath());
             }
 
-            if (options.has("no-color")) {
-                log.info("No color mode activated.");
-                log.setColor(false);
+            Integer target_width, target_height;
+            target_width = (Integer) options.valueOf("width");
+            target_height = (Integer) options.valueOf("height");
+            log.info("Width: %d, Height: %d", target_width, target_height);
+            if (target_width == 0 && target_height == 0) {
+                log.error("It can't be both width and height null");
+                parser.printHelpOn(System.out);
+                return;
             }
 
-            Integer width, height;
-            width = (Integer) options.valueOf("width");
-            height = (Integer) options.valueOf("height");
-            log.info("Width: %d, Height: %d", width, height);
-            if (width < 0) {
-                log.error("Width cannot be negative: %d", width);
+            if (target_width < 0) {
+                log.error("Width cannot be negative: %d", target_width);
                 parser.printHelpOn(System.out);
                 return;
-            } else if (height < 0) {
-                log.error("Height cannot be negative: %d", height);
+            } else if (target_height < 0) {
+                log.error("Height cannot be negative: %d", target_height);
                 parser.printHelpOn(System.out);
                 return;
+            }
+
+
+            int width = 0, height = 0;
+            double aspect = (double) target_width / target_height;
+            if (target_width == 0) {
+                width = (int) (target_height * aspect); // Breite berechnen
+            } else if (target_height == 0) {
+                height = (int) (target_width / aspect); // Höhe berechnen
+            } else {
+                width = target_width;
+                height = target_height;
             }
 
             String charset = options.valueOf("charset").toString();
-        } catch (joptsimple.OptionException e) {
+            Renderer renderer = new Renderer(log.isColor(), charset);
+            BufferedImage frame = FFmpegLoader.load(imgPath.getAbsolutePath(), width, height);
+            String rendered = renderer.renderFrame(frame);
+            if (!no_output) {
+                log.info("Rendered frame outputting it");
+                IO.print(rendered);
+                log.info("Rendered frame outputted");
+            }
+
+        } catch (OptionException e) {
             log.error("Missing required options");
             try {
                 parser.printHelpOn(System.out);

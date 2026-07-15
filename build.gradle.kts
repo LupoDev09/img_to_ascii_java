@@ -18,6 +18,8 @@ dependencies {
     implementation("net.sf.jopt-simple:jopt-simple:5.0.4") // For arg parsing
     implementation("org.jetbrains:annotations:24.1.0") // For annotations
 
+    implementation("org.bytedeco:javacv-platform:1.5.13") // Für ffmpeg
+
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

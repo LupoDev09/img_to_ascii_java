@@ -4,6 +4,7 @@ plugins {
     id("com.gradleup.shadow") version "9.0.0"
 }
 
+
 group = "me.lupo"
 version = "1.0.0"
 
@@ -20,9 +21,19 @@ dependencies {
     implementation("net.sf.jopt-simple:jopt-simple:5.0.4") // For arg parsing
     implementation("org.jetbrains:annotations:24.1.0") // For annotations
 
+
+    // Get the current OS to only download one version of ffmpeg
+    val os = System.getProperty("os.name").lowercase()
+    val ffmpegPlatform = when {
+        os.contains("win") -> "windows-x86_64"
+        os.contains("linux") -> "linux-x86_64"
+        os.contains("mac") -> "macosx-x86_64"
+        else -> throw GradleException("Unsupported OS: $os")
+    }
+
     // Für ffmpeg
     implementation("org.bytedeco:javacv:1.5.13")
-    implementation("org.bytedeco:ffmpeg:6.1.1-1.5.10:windows-x86_64")
+    implementation("org.bytedeco:ffmpeg:7.1-1.5.13:$ffmpegPlatform")
 
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")

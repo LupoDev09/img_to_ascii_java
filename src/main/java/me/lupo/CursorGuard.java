@@ -5,12 +5,12 @@ public class CursorGuard implements AutoCloseable {
 
     public CursorGuard() {
         log.debug("CursorGuard created");
-        IO.println("\033[?25l"); // Hide cursor
+        System.out.println("\033[?25l"); // Hide cursor
     }
 
     @Override
     public void close() {
         log.debug("CursorGuard cleaned up");
-        IO.println("\033[?25h"); // Show cursor
+        System.out.println("\033[?25h"); // Show cursor
     }
 }

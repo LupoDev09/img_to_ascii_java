@@ -20,15 +20,15 @@ public class Main {
 
     private static final Logger log = Logger.getInstance();
 
-    private static final boolean MockArgs = true;
+    private static final boolean MockArgs = false;
     private static final String[] MockArguments = new String[] {
-            "--log-level", "ERROR",
+            "--log-level", "debug",
             "--image", "funny.gif",
             "--height", "124"
     };
 
     // TODO: Add Audio Support
-    static void main(String[] args) {
+    public static void main(String[] args) {
         try {
             log.setColor(false);
             log.info("Logger initialized. " + Logger.getInstance());
@@ -112,29 +112,20 @@ public class Main {
              */
             LoadResult frames = FFmpegLoader.load(imgPath.getAbsolutePath(), targetWidth, targetHeight);
             ArrayList<String> rendered_frames = renderer.renderFrames(frames.frames());
-            try (CursorGuard _ = new CursorGuard()) {// Clear the Console before writing frames to it
-                if (!no_output) IO.print(CLEAR_CONSOLE);
+            try (CursorGuard a = new CursorGuard()) {// Clear the Console before writing frames to it
+                if (!no_output) System.out.print(CLEAR_CONSOLE);
 
                 // Render output frames one by one
-                long frameTime = Math.round(1_000_000_000.0 / frames.fps()); // nanoseconds
-                long lastTime = System.nanoTime();
-
                 for (int i = 0; i < rendered_frames.size(); i++) {
                     String rendered_frame = rendered_frames.get(i);
                     if (!no_output) {
-                        long now = System.nanoTime();
+                        System.out.print(rendered_frame);
 
-                        if (now - lastTime >= frameTime) {
-                            IO.print(rendered_frame);
-
-                            // Nur löschen, wenn noch ein Frame danach kommt
-                            if (i != rendered_frames.size() - 1) {
-                                IO.print(CURSOR_HOME);
-                            }
-                            lastTime += frameTime;
-                        } else {
-                            Thread.sleep(1); // CPU entlasten
+                        // Nur löschen, wenn noch ein Frame danach kommt
+                        if (i != rendered_frames.size() - 1) {
+                            System.out.print(CURSOR_HOME);
                         }
+                        Thread.sleep((long) (1000.0 / frames.fps())); // CPU entlasten
                     }
                 }
             }

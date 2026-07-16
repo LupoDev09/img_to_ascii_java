@@ -1,9 +1,6 @@
 package me.lupo;
 
-import org.jetbrains.annotations.NotNull;
-
 import java.awt.image.BufferedImage;
-import java.util.ArrayList;
 
 public class Renderer {
     private final Logger log = Logger.getInstance();
@@ -66,16 +63,6 @@ public class Renderer {
         }
 
         return result.toString();
-    }
-
-    public ArrayList<String> renderFrames(@NotNull ArrayList<BufferedImage> imgs) {
-        log.debug("Render frames got called with %d images", imgs.size());
-        ArrayList<String> renderedFrames = new ArrayList<>();
-
-        for (BufferedImage img : imgs) {
-            renderedFrames.add(renderFrame(img));
-        }
-        return renderedFrames;
     }
 
     /**

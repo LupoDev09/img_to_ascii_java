@@ -7,29 +7,26 @@ import joptsimple.OptionSet;
 import org.jetbrains.annotations.NotNull;
 
 // Everything else
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 public class Main {
-    private static final String CLEAR_CONSOLE = "\033[2J\033[H";
-    private static final String CURSOR_HOME = "\033[H";
-
     private static final OptionParser parser = setParser();
-
     private static final Logger log = Logger.getInstance();
 
-    private static final boolean MockArgs = false;
+    // Mock args so I can change the args easier in IntelliJ
+    private static final boolean MockArgs = true;
     private static final String[] MockArguments = new String[] {
-            "--log-level", "debug",
+            "--log-level", "error",
             "--image", "funny.gif",
-            "--height", "124"
+            "--height", "40"
     };
 
     // TODO: Add Audio Support
     public static void main(String[] args) {
-        try {
+        try (OutputWriter outputWriter = new OutputWriter()) {
             log.setColor(false);
             log.info("Logger initialized. " + Logger.getInstance());
 
@@ -94,8 +91,8 @@ public class Main {
                 log.debug("Input image path: %s", imgPath.getAbsolutePath());
             }
 
-            int targetWidth = (int) options.valueOf("width");
-            int targetHeight = (int) options.valueOf("height");
+            int targetWidth = (Integer) options.valueOf("width");
+            int targetHeight = (Integer) options.valueOf("height");
             log.debug("Width: %d, Height: %d", targetWidth, targetHeight);
 
             if (targetWidth < 0 || targetHeight < 0) {
@@ -103,7 +100,8 @@ public class Main {
                 return;
             }
 
-            String charset = options.valueOf("charset").toString();
+            String charset = (String) options.valueOf("charset");
+            log.debug("Charset: %s", charset);
             Renderer renderer = new Renderer(log.isColor(), charset);
 
             /*
@@ -111,23 +109,18 @@ public class Main {
              *  and an output thread To save on Memory
              */
             LoadResult frames = FFmpegLoader.load(imgPath.getAbsolutePath(), targetWidth, targetHeight);
-            ArrayList<String> rendered_frames = renderer.renderFrames(frames.frames());
-            try (CursorGuard a = new CursorGuard()) {// Clear the Console before writing frames to it
-                if (!no_output) System.out.print(CLEAR_CONSOLE);
+            outputWriter.setFps(frames.fps());
+            outputWriter.start();
 
-                // Render output frames one by one
-                for (int i = 0; i < rendered_frames.size(); i++) {
-                    String rendered_frame = rendered_frames.get(i);
-                    if (!no_output) {
-                        System.out.print(rendered_frame);
-
-                        // Nur löschen, wenn noch ein Frame danach kommt
-                        if (i != rendered_frames.size() - 1) {
-                            System.out.print(CURSOR_HOME);
-                        }
-                        Thread.sleep((long) (1000.0 / frames.fps())); // CPU entlasten
-                    }
+            // Render output frames one by one
+            if (!no_output) {
+                for (BufferedImage frame : frames.frames()) {
+                    String rendered_frame = renderer.renderFrame(frame);
+                    outputWriter.append(rendered_frame);
                 }
+            } else {
+                outputWriter.shutdown();
+                outputWriter.join(); // wartet bis Thread fertig ist
             }
         } catch (OptionException e) {
             log.error("Missing required options");
@@ -138,7 +131,8 @@ public class Main {
             }
         }
         catch (Exception e) {
-            log.error("Unexpected error: %s", e);
+            log.error("Unexpected error: %s", e.getMessage());
+            log.debug("Stacktrace: %s", (Object) e.getStackTrace());
         } finally {
             log.info("Bye :3");
         }

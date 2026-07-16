@@ -15,9 +15,12 @@ import java.util.List;
 public class Main {
     private static final OptionParser parser = setParser();
     private static final Logger log = Logger.getInstance();
+    private static boolean no_output = false;
+    private static OutputWriter outputWriter;
+    private static Renderer renderer;
 
     // Mock args so I can change the args easier in IntelliJ
-    private static final boolean MockArgs = true;
+    private static final boolean MockArgs = false;
     private static final String[] MockArguments = new String[] {
             "--log-level", "error",
             "--image", "funny.gif",
@@ -26,7 +29,7 @@ public class Main {
 
     // TODO: Add Audio Support
     public static void main(String[] args) {
-        try (OutputWriter outputWriter = new OutputWriter()) {
+        try {
             log.setColor(false);
             log.info("Logger initialized. " + Logger.getInstance());
 
@@ -69,7 +72,7 @@ public class Main {
                 }
             }
 
-            boolean no_output = options.has("no-output");
+            no_output = options.has("no-output");
             if (no_output) {
                 log.debug("No output mode activated.");
             } else {
@@ -102,26 +105,16 @@ public class Main {
 
             String charset = (String) options.valueOf("charset");
             log.debug("Charset: %s", charset);
-            Renderer renderer = new Renderer(log.isColor(), charset);
+            renderer = new Renderer(log.isColor(), charset);
+            outputWriter = new OutputWriter();
+            outputWriter.setFps(1); // temporärer Default
 
-            /*
-             * TODO: Replace the current way to load and render frames with some sort of a onFrame callback
-             *  and an output thread To save on Memory
-             */
-            LoadResult frames = FFmpegLoader.load(imgPath.getAbsolutePath(), targetWidth, targetHeight);
-            outputWriter.setFps(frames.fps());
-            outputWriter.start();
-
-            // Render output frames one by one
+            // Thread starten, falls Ausgabe gewünscht
             if (!no_output) {
-                for (BufferedImage frame : frames.frames()) {
-                    String rendered_frame = renderer.renderFrame(frame);
-                    outputWriter.append(rendered_frame);
-                }
-            } else {
-                outputWriter.shutdown();
-                outputWriter.join(); // wartet bis Thread fertig ist
+                outputWriter.start();
             }
+
+            FFmpegLoader.load(imgPath.getAbsolutePath(), targetWidth, targetHeight, Main::frameCallback);
         } catch (OptionException e) {
             log.error("Missing required options");
             try {
@@ -134,7 +127,16 @@ public class Main {
             log.error("Unexpected error: %s", e.getMessage());
             log.debug("Stacktrace: %s", (Object) e.getStackTrace());
         } finally {
-            log.info("Bye :3");
+            // OutputWriter sauber herunterfahren (nur wenn gestartet)
+            if (!no_output) {
+                try {
+                    outputWriter.shutdown();
+                } catch (InterruptedException e) {
+                    log.error("Interrupted while shutting down output writer");
+                    Thread.currentThread().interrupt();
+                }
+            }
+            System.out.println("Bye :3");
         }
     }
 
@@ -143,6 +145,7 @@ public class Main {
         parser.acceptsAll(List.of("?", "help"), "print this message");
         parser.accepts("no-color", "Deactivate color in Terminal output");
         parser.accepts("no-audio", "Deactivate audio");
+        parser.accepts("no-output", "Disable output to console, useful for benchmarking");
 
         parser.accepts("log-level", "Set log level (debug, info, warn, error)")
                 .withRequiredArg()
@@ -165,8 +168,32 @@ public class Main {
                 .ofType(String.class)
                 .defaultsTo(" ░▒▓█");
 
-        parser.accepts("no-output", "Disable output to console, useful for benchmarking");
-
         return parser;
     }
+
+    public static @NotNull String GetMemoryUsage() {
+        Runtime runtime = Runtime.getRuntime();
+        long totalMemory = runtime.totalMemory();        // Currently allocated heap
+        long freeMemory = runtime.freeMemory();          // Free heap space
+        long usedMemory = totalMemory - freeMemory;      // Actually used heap
+        long maxMemory = runtime.maxMemory();            // Max heap it can grow to
+
+        return String.format("Heap Used: %d MB, Heap Total: %d MB, Heap Max: %d MB",
+                usedMemory / 1024 / 1024,
+                totalMemory / 1024 / 1024,
+                maxMemory / 1024 / 1024);
+    }
+
+    private static void frameCallback (@NotNull BufferedImage frame, boolean firstFrame, double fps) {
+        log.debug("Frame received with dimensions: %dx%d", frame.getWidth(), frame.getHeight());
+        if (!no_output) {
+            if (firstFrame) {
+                outputWriter.setFps(fps);
+            }
+            String rendered_frame = renderer.renderFrame(frame);
+            rendered_frame += '\n' + GetMemoryUsage();
+            outputWriter.append(rendered_frame);
+        }
+    }
+
 }

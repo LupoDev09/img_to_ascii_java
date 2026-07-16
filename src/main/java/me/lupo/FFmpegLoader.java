@@ -9,13 +9,15 @@ import org.jetbrains.annotations.NotNull;
 
 import java.awt.*;
 import java.awt.image.BufferedImage;
-import java.util.ArrayList;
 
 import static org.bytedeco.ffmpeg.global.avutil.AV_LOG_ERROR;
 
 public class FFmpegLoader {
-
     private static final Logger log = Logger.getInstance();
+
+    public interface FrameCallback {
+        void onFrame(BufferedImage frame, boolean firstFrame, double fps);
+    }
 
     @Contract("_, _, _, _ -> new")
     public static @NotNull Dimension calculateSize(int originalWidth, int originalHeight, int targetWidth, int targetHeight) {
@@ -45,16 +47,13 @@ public class FFmpegLoader {
         }
     }
 
-    public static @NotNull LoadResult load(String path, Integer targetWidth, Integer targetHeight) throws Exception {
+    public static void load(String path, Integer targetWidth, Integer targetHeight, FrameCallback onFrame) throws Exception {
         log.debug("Method load in FFmpegLoader got called with: path=%s targetWidth=%s targetHeight=%s",
                 path, targetWidth, targetHeight);
 
         log.info("Loading video frames from path: %s", path);
 
-        ArrayList<BufferedImage> frames = new ArrayList<>();
-
         FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(path);
-
         try (Java2DFrameConverter converter = new Java2DFrameConverter()) {
             FFmpegLogCallback.setLevel(AV_LOG_ERROR);
             grabber.start();
@@ -71,6 +70,7 @@ public class FFmpegLoader {
             
             Frame frame;
 
+            boolean firstFrame = true;
             while ((frame = grabber.grabImage()) != null) {
 
                 BufferedImage img = converter.convert(frame);
@@ -103,13 +103,13 @@ public class FFmpegLoader {
 
                 g.dispose();
 
-                frames.add(scaled);
+                if (firstFrame) {
+                    onFrame.onFrame(scaled, true, grabber.getVideoFrameRate());
+                    firstFrame = false;
+                } else {
+                    onFrame.onFrame(scaled, false, 1);
+                }
             }
-
-            log.info("Loaded %d frames", frames.size());
-
-            return new LoadResult(frames, grabber.getVideoFrameRate());
-
         } finally {
             grabber.stop();
             grabber.release();

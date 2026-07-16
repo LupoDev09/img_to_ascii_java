@@ -86,14 +86,15 @@ public final class Logger {
         String line = String.format("%s [%s] %s", timestamp, level, message);
         // Je nach Schweregrad auf out oder err ausgeben
         PrintStream target = (level == Level.ERROR || level == Level.FATAL) ? err : out;
+
+        String outPut;
+        if (useColor)
+            outPut = getColorString(level) + line + RESET_COLOR;
+        else
+            outPut = line;
+
         synchronized (writeLock) {
-            if (useColor) {
-                target.print(getColorString(level));
-            }
-            target.println(line);
-            if (useColor) {
-                target.print(RESET_COLOR);
-            }
+            target.println(outPut);
         }
     }
 

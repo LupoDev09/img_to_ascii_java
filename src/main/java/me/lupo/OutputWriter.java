@@ -8,7 +8,6 @@ public class OutputWriter extends Thread implements AutoCloseable {
     Logger log = Logger.getInstance();
 
     BlockingQueue<String> framesToWrite = new LinkedBlockingQueue<>();
-    boolean running;
     private volatile double fps;
 
     private static final String CLEAR_CONSOLE = "\033[2J\033[H";
@@ -16,28 +15,30 @@ public class OutputWriter extends Thread implements AutoCloseable {
     private static final String POISON = "__END__";
 
     public OutputWriter(double fps) {
-        running = true;
-        this.fps = fps;
+        setFps(fps);
     }
 
     public OutputWriter() {
-        running = true;
-        this.fps = 1;
+        setFps(1);
     }
 
     public void shutdown() throws InterruptedException {
-        running = false;
         framesToWrite.add(POISON); // Add the poison pill to unblock the thread if it's waiting
         this.join(); // wartet bis Thread fertig ist
     }
 
     public void setFps(double fps) {
-        this.fps = fps;
+        this.fps = (fps <= 0) ? 1 : fps;
     }
 
     public void append(String frame) {
         log.debug("append got called");
-        framesToWrite.add(frame);
+        try {
+            framesToWrite.put(frame);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
@@ -63,8 +64,7 @@ public class OutputWriter extends Thread implements AutoCloseable {
                     System.out.flush();
 
                     // Calc time needed to wait
-                    double fps = this.fps <= 0 ? 1 : this.fps;
-                    long frameDuration = (long) (1_000_000_000.0 / fps);
+                    long frameDuration = (long) (1_000_000_000.0 / this.fps);
 
                     nextFrameTime += frameDuration;
 

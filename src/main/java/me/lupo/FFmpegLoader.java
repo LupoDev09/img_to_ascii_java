@@ -3,20 +3,19 @@ package me.lupo;
 import org.bytedeco.javacv.FFmpegFrameGrabber;
 import org.bytedeco.javacv.FFmpegLogCallback;
 import org.bytedeco.javacv.Frame;
-import org.bytedeco.javacv.Java2DFrameConverter;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 
-import java.awt.*;
-import java.awt.image.BufferedImage;
+import java.awt.Dimension;
 
 import static org.bytedeco.ffmpeg.global.avutil.AV_LOG_ERROR;
+import static org.bytedeco.ffmpeg.global.avutil.AV_PIX_FMT_BGR24;
 
 public class FFmpegLoader {
     private static final Logger log = Logger.getInstance();
 
     public interface FrameCallback {
-        void onFrame(BufferedImage frame, boolean firstFrame, double fps);
+        void onFrame(Frame frame, double fps);
     }
 
     @Contract("_, _, _, _ -> new")
@@ -29,6 +28,8 @@ public class FFmpegLoader {
                 targetHeight
         );
 
+        // Terminal characters are roughly twice as high as wide,
+        // therefore compensate the height/width calculation.
         double aspect = (double) originalWidth / originalHeight;
 
         if (targetWidth == 0 && targetHeight == 0) {
@@ -47,16 +48,18 @@ public class FFmpegLoader {
         }
     }
 
-    public static void load(String path, Integer targetWidth, Integer targetHeight, FrameCallback onFrame) throws Exception {
+    public static void load(String path, Integer targetWidth, Integer targetHeight, FrameCallback onFrame) throws FFmpegFrameGrabber.Exception {
         log.debug("Method load in FFmpegLoader got called with: path=%s targetWidth=%s targetHeight=%s",
                 path, targetWidth, targetHeight);
 
         log.info("Loading video frames from path: %s", path);
 
+        FFmpegLogCallback.setLevel(AV_LOG_ERROR);
         FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(path);
-        try (Java2DFrameConverter converter = new Java2DFrameConverter()) {
-            FFmpegLogCallback.setLevel(AV_LOG_ERROR);
-            grabber.start();
+
+        try {
+            grabber.setPixelFormat(AV_PIX_FMT_BGR24); // Immer BGR24 liefern
+            grabber.start(); // Start the grabber once to set the Image width and height for the scaling
 
             int originalWidth = grabber.getImageWidth();
             int originalHeight = grabber.getImageHeight();
@@ -67,48 +70,19 @@ public class FFmpegLoader {
                     targetWidth,
                     targetHeight
             );
-            
+
+            grabber.stop();
+
+
+            // FFmpeg für das scaling
+            grabber.setImageWidth(size.width);
+            grabber.setImageHeight(size.height);
+
+            grabber.start();
+
             Frame frame;
-
-            boolean firstFrame = true;
             while ((frame = grabber.grabImage()) != null) {
-
-                BufferedImage img = converter.convert(frame);
-
-                if (img == null) {
-                    continue;
-                }
-
-                BufferedImage scaled = new BufferedImage(
-                        size.width,
-                        size.height,
-                        BufferedImage.TYPE_INT_RGB
-                );
-
-                Graphics2D g = scaled.createGraphics();
-
-                g.setRenderingHint(
-                        RenderingHints.KEY_INTERPOLATION,
-                        RenderingHints.VALUE_INTERPOLATION_BILINEAR
-                );
-
-                g.drawImage(
-                        img,
-                        0,
-                        0,
-                        size.width,
-                        size.height,
-                        null
-                );
-
-                g.dispose();
-
-                if (firstFrame) {
-                    onFrame.onFrame(scaled, true, grabber.getVideoFrameRate());
-                    firstFrame = false;
-                } else {
-                    onFrame.onFrame(scaled, false, 1);
-                }
+                onFrame.onFrame(frame, grabber.getVideoFrameRate());
             }
         } finally {
             grabber.stop();

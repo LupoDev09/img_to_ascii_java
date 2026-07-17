@@ -9,6 +9,7 @@ public class OutputWriter extends Thread implements AutoCloseable {
 
     BlockingQueue<String> framesToWrite = new LinkedBlockingQueue<>();
     private volatile double fps;
+    private volatile boolean running = true;
 
     private static final String CLEAR_CONSOLE = "\033[2J\033[H";
     private static final String CURSOR_HOME = "\033[H";

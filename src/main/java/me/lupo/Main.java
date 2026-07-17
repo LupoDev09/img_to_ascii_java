@@ -1,21 +1,73 @@
 package me.lupo;
 
 // Parsing
-import joptsimple.OptionException;
-import joptsimple.OptionParser;
-import joptsimple.OptionSet;
+import picocli.CommandLine;
+import picocli.CommandLine.Option;
+
 import org.bytedeco.javacv.Frame;
 import org.jetbrains.annotations.NotNull;
 
 // Everything else
 import java.io.File;
-import java.io.IOException;
-import java.util.List;
 
-public class Main {
+public class Main implements Runnable {
     private static final Logger log = Logger.getInstance();
-    private static final OptionParser parser = setParser();
-    private static boolean no_output = false;
+    // === FLAGS ===
+    @CommandLine.ArgGroup(heading = "%nFlags:%n")
+    static Flags flags = new Flags();
+
+    static class Flags {
+        @Option(names = {"-h", "--help"}, usageHelp = true, description = "Display this help message")
+        boolean help;
+
+        @Option(names = {"--no-color"}, description = "Deactivate color in Terminal output")
+        boolean noColor;
+
+        @Option(names = {"--no-audio"}, description = "Deactivate audio")
+        boolean noAudio;
+
+        @Option(names = {"--no-output"}, description = "Disable output to console")
+        boolean noOutput;
+
+        @Option(names = {"--log-level"}, description = "Set log level (debug, info, warn, error)")
+        String logLevel = "ERROR";
+    }
+
+    // === INPUT ===
+    @CommandLine.ArgGroup(heading = "%nInput:%n")
+    Input input = new Input();
+
+    static class Input {
+        @Option(
+                names = {"-i", "--img", "--image", "--input"},
+                description = "Path to the input image",
+                required = true
+        )
+        File image;
+    }
+
+    // === SIZE ===
+    @CommandLine.ArgGroup(heading = "%nSize:%n", multiplicity = "1..*")
+    Size size = new Size();
+
+    static class Size {
+        @Option(names = {"--width"}, description = "Width (0 = auto)")
+        Integer width; // Bewusst Integer → null = nicht gesetzt
+
+        @Option(names = {"--height"}, description = "Height (0 = auto)")
+        Integer height;
+    }
+
+    // === RENDER ===
+    @CommandLine.ArgGroup(heading = "%nRender:%n")
+    Render render = new Render();
+
+    static class Render {
+        @Option(names = {"-c", "--charset"}, description = "Charset", defaultValue = " ░▒▓█")
+        String charset;
+    }
+    private static final boolean showMemoryUsage = true;
+
     private static OutputWriter outputWriter;
     private static Renderer renderer;
 
@@ -29,78 +81,64 @@ public class Main {
             "--height", "40"
     };
 
-    private static final boolean showMemoryUsage = true;
-
     // TODO: Add Audio Support
     public static void main(String[] args) {
+        if (MockArgs) {
+            args = MockArguments;
+        }
+        CommandLine cmd = new CommandLine(new Main());
+
+        cmd.setExecutionExceptionHandler((ex, commandLine, DummyVarForGradlewInTheCLI) -> {
+            System.err.println(ex.getMessage());
+            commandLine.usage(System.err);
+            return 1;
+        });
+
+        cmd.setParameterExceptionHandler((ex, DummyVarForGradlewInTheCLI) -> {
+            System.err.println(ex.getMessage());
+            ex.getCommandLine().usage(System.err);
+            return 1;
+        });
+
+        // Help wenn keine args
+        if (args.length == 0) {
+            cmd.usage(System.out);
+            return;
+        }
+
+        int exitCode = cmd.execute(args);
+        System.exit(exitCode);
+    }
+
+    @Override
+    public void run() {
         try {
-            log.setColor(false);
-            log.setLevel(Logger.Level.ERROR);
+            // === LOGGER SETUP ===
+            log.setColor(!flags.noColor);
+
+            try {
+                log.setLevel(Logger.Level.valueOf(flags.logLevel.toUpperCase()));
+            } catch (IllegalArgumentException e) {
+                log.error("Invalid log level: %s", flags.logLevel);
+                return;
+            }
+
+            log.debug("Options parsed successfully");
             log.info("Logger initialized. " + Logger.getInstance());
 
-            OptionSet options;
-            if (!MockArgs) {
-                options = parser.parse(args);
-            } else {
-                options = parser.parse(MockArguments);
-            }
-
-            log.debug("Parsed options: %s", options.asMap());
-            try {
-                if (options.has("help")) {
-                    log.info("Help requested, printing help and exiting.");
-                    parser.printHelpOn(System.out);
-                    return;
-                }
-            } catch (IOException e) {
-                log.error("Something went wrong while printing help. How da fuck? %s", e.getMessage());
+            if (input.image == null) {
+                log.error("Input image is required");
                 return;
             }
 
-            if (options.has("no-color")) {
-                log.debug("No color mode activated.");
-                log.setColor(false);
-            } else {
-                log.setColor(true);
-                log.debug("Color mode activated");
-            }
-
-            if (options.has("log-level")) {
-                String value = options.valueOf("log-level").toString();
-                value = value.toUpperCase();
-                try {
-                    log.setLevel(Logger.Level.valueOf(value));
-                    log.info("Log level set to: %s", value);
-                } catch (IllegalArgumentException e) {
-                    log.error("Invalid log level: %s", value);
-                    System.exit(1);
-                }
-            }
-
-            no_output = options.has("no-output");
-            if (no_output) {
-                log.debug("No output mode activated.");
-            } else {
-                log.debug("Output mode activated.");
-            }
-
-            File imgPath;
-            if (!options.has("image")) {
-                log.error("No input image provided. Use --image <path> to specify an image.");
-                parser.printHelpOn(System.out);
+            // === VALIDATION ===
+            if (!input.image.exists()) {
+                log.error("Image does not exist: %s", input.image.getAbsolutePath());
                 return;
-            } else {
-                imgPath = new File(options.valueOf("image").toString());
-                if (!imgPath.exists()) {
-                    log.error("Specified image path does not exist: %s", imgPath.getAbsolutePath());
-                    parser.printHelpOn(System.out);
-                    return;
-                }
-                log.debug("Input image path: %s", imgPath.getAbsolutePath());
             }
 
-            int targetWidth = (Integer) options.valueOf("width");
-            int targetHeight = (Integer) options.valueOf("height");
+            int targetWidth = (size.width == null) ? 0 : size.width;
+            int targetHeight = (size.height == null) ? 0 : size.height;
             log.debug("Width: %d, Height: %d", targetWidth, targetHeight);
 
             if (targetWidth < 0 || targetHeight < 0) {
@@ -108,31 +146,33 @@ public class Main {
                 return;
             }
 
-            String charset = (String) options.valueOf("charset");
-            log.debug("Charset: %s", charset);
-            renderer = new Renderer(log.isColor(), charset);
+            // === INIT ===
+            renderer = new Renderer(log.isColor(), render.charset);
+            outputWriter = new OutputWriter();
+            outputWriter.setFps(1);
+
+            if (!flags.noOutput) {
+                outputWriter.start();
+            }
+
+
+            log.debug("Charset: %s", render.charset);
+            renderer = new Renderer(log.isColor(), render.charset);
             outputWriter = new OutputWriter();
             outputWriter.setFps(1); // temporärer Default
 
             // Thread starten, falls Ausgabe gewünscht
-            if (!no_output) {
+            if (!flags.noOutput) {
                 outputWriter.start();
             }
 
-            FFmpegLoader.load(imgPath.getAbsolutePath(), targetWidth, targetHeight, Main::frameCallback);
-        } catch (OptionException e) {
-            log.info("Missing required options");
-            try {
-                parser.printHelpOn(System.out);
-            } catch (IOException ioException) {
-                log.error("Something went wrong while printing help. How da fuck? %s", ioException.getMessage());
-            }
+            FFmpegLoader.load(input.image.getAbsolutePath(), targetWidth, targetHeight, Main::frameCallback);
         } catch (Exception e) {
             log.error("Unexpected error: %s", e.getMessage());
             log.debug("Stacktrace: %s", (Object) e.getStackTrace());
         } finally {
             // OutputWriter sauber herunterfahren (nur wenn gestartet)
-            if (!no_output) {
+            if (!flags.noOutput) {
                 try {
                     if (outputWriter != null) outputWriter.shutdown();
                 } catch (InterruptedException e) {
@@ -144,43 +184,6 @@ public class Main {
             System.out.println("Bye :3");
         }
     }
-
-
-    /**
-     * sets up the CLI parser
-     * @return the configured OptionParser
-     */
-    private static @NotNull OptionParser setParser() {
-        OptionParser parser = new OptionParser();
-        parser.acceptsAll(List.of("?", "help"), "print this message");
-        parser.accepts("no-color", "Deactivate color in Terminal output");
-        parser.accepts("no-audio", "Deactivate audio");
-        parser.accepts("no-output", "Disable output to console, useful for benchmarking");
-
-        parser.accepts("log-level", "Set log level (debug, info, warn, error)")
-                .withRequiredArg()
-                .ofType(String.class);
-
-        parser.acceptsAll(List.of("img", "image", "input", "i"), "Path to the input image")
-                .withRequiredArg()
-                .ofType(String.class)
-                .required();
-        parser.acceptsAll(List.of("width", "w"), "Width of the output ASCII art 0 = auto")
-                .withRequiredArg()
-                .ofType(Integer.class)
-                .defaultsTo(0);
-        parser.acceptsAll(List.of("height", "h"), "Height of the output ASCII art 0 = auto")
-                .withRequiredArg()
-                .ofType(Integer.class)
-                .defaultsTo(0);
-        parser.acceptsAll(List.of("c", "charset"), "Charset for the output ASCII art")
-                .withRequiredArg()
-                .ofType(String.class)
-                .defaultsTo(" ░▒▓█");
-
-        return parser;
-    }
-
 
     /**
      * returns a string with the current heap usage the heap Total size and the max Heap size
@@ -207,12 +210,11 @@ public class Main {
      */
     private static void frameCallback (@NotNull Frame frame, double fps) {
         log.debug("Frame received with dimensions: %dx%d", frame.imageWidth, frame.imageHeight);
-        if (!no_output) {
+        if (!flags.noOutput) {
             outputWriter.setFps(fps);
             String rendered_frame = renderer.renderFrame(frame);
             if (showMemoryUsage) rendered_frame += '\n' + GetMemoryUsage() + '\n';
             outputWriter.append(rendered_frame);
         }
     }
-
 }

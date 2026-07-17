@@ -18,7 +18,7 @@ repositories {
 }
 
 dependencies {
-    implementation("net.sf.jopt-simple:jopt-simple:5.0.4") // For arg parsing
+    implementation("info.picocli:picocli:4.7.6") // For arg parsing
     implementation("org.jetbrains:annotations:24.1.0") // For annotations
 
 

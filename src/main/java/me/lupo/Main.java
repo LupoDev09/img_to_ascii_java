@@ -1,8 +1,9 @@
 package me.lupo;
 
 // Parsing
-import picocli.CommandLine;
+import picocli.CommandLine.ArgGroup;
 import picocli.CommandLine.Option;
+import picocli.CommandLine;
 
 import org.bytedeco.javacv.Frame;
 import org.jetbrains.annotations.NotNull;
@@ -13,7 +14,7 @@ import java.io.File;
 public class Main implements Runnable {
     private static final Logger log = Logger.getInstance();
     // === FLAGS ===
-    @CommandLine.ArgGroup(heading = "%nFlags:%n")
+    @ArgGroup(heading = "%nFlags:%n")
     static Flags flags = new Flags();
 
     static class Flags {
@@ -34,7 +35,7 @@ public class Main implements Runnable {
     }
 
     // === INPUT ===
-    @CommandLine.ArgGroup(heading = "%nInput:%n")
+    @ArgGroup(heading = "%nInput:%n")
     Input input = new Input();
 
     static class Input {
@@ -47,7 +48,7 @@ public class Main implements Runnable {
     }
 
     // === SIZE ===
-    @CommandLine.ArgGroup(heading = "%nSize:%n", multiplicity = "1..*")
+    @ArgGroup(heading = "%nSize:%n", multiplicity = "1..*")
     Size size = new Size();
 
     static class Size {
@@ -59,7 +60,7 @@ public class Main implements Runnable {
     }
 
     // === RENDER ===
-    @CommandLine.ArgGroup(heading = "%nRender:%n")
+    @ArgGroup(heading = "%nRender:%n")
     Render render = new Render();
 
     static class Render {

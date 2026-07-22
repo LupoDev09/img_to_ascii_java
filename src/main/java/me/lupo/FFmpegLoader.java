@@ -55,12 +55,11 @@ public class FFmpegLoader {
 
         log.info("Loading video frames from path: %s", path);
 
-        FFmpegLogCallback.setLevel(AV_LOG_ERROR);
-
-        AudioPlayer player = new AudioPlayer();
-
-        try (FFmpegFrameGrabber probe = new FFmpegFrameGrabber(path);
+        try (AudioPlayer player = new AudioPlayer();
+             FFmpegFrameGrabber probe = new FFmpegFrameGrabber(path);
              FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(path)) {
+            FFmpegLogCallback.setLevel(AV_LOG_ERROR);
+
             probe.start();
 
             int originalWidth = probe.getImageWidth();

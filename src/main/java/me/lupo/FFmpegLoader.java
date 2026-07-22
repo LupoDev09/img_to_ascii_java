@@ -3,6 +3,7 @@ package me.lupo;
 import org.bytedeco.javacv.FFmpegFrameGrabber;
 import org.bytedeco.javacv.FFmpegLogCallback;
 import org.bytedeco.javacv.Frame;
+import org.bytedeco.javacv.FrameGrabber;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 
@@ -19,7 +20,7 @@ public class FFmpegLoader {
     }
 
     @Contract("_, _, _, _ -> new")
-    public static @NotNull Dimension calculateSize(int originalWidth, int originalHeight, int targetWidth, int targetHeight) {
+    private static @NotNull Dimension calculateSize(int originalWidth, int originalHeight, int targetWidth, int targetHeight) {
         log.debug(
                 "Method calculateSize in FFmpegLoader got called with: originalWidth=%s originalHeight=%s targetWidth=%s targetHeight=%s",
                 originalWidth,
@@ -48,30 +49,24 @@ public class FFmpegLoader {
         }
     }
 
-    public static void load(String path, Integer targetWidth, Integer targetHeight, FrameCallback onFrame) throws FFmpegFrameGrabber.Exception {
+    public static void load(String path, Integer targetWidth, Integer targetHeight, FrameCallback onFrame) {
         log.debug("Method load in FFmpegLoader got called with: path=%s targetWidth=%s targetHeight=%s",
                 path, targetWidth, targetHeight);
 
         log.info("Loading video frames from path: %s", path);
 
         FFmpegLogCallback.setLevel(AV_LOG_ERROR);
-        FFmpegFrameGrabber probe = new FFmpegFrameGrabber(path);
-        FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(path);
 
         AudioPlayer player = new AudioPlayer();
 
-        try {
+        try (FFmpegFrameGrabber probe = new FFmpegFrameGrabber(path);
+             FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(path)) {
             probe.start();
 
             int originalWidth = probe.getImageWidth();
             int originalHeight = probe.getImageHeight();
 
-            Dimension size = calculateSize(
-                    originalWidth,
-                    originalHeight,
-                    targetWidth,
-                    targetHeight
-            );
+            Dimension size = calculateSize(originalWidth, originalHeight, targetWidth, targetHeight);
 
             probe.stop();
 
@@ -89,7 +84,7 @@ public class FFmpegLoader {
             boolean didTheAudoLineFail = false;
             while ((frame = grabber.grab()) != null) {
                 if (frame.image != null) {
-                onFrame.onFrame(frame, grabber.getVideoFrameRate());
+                    onFrame.onFrame(frame, grabber.getVideoFrameRate());
                 }
 
                 if (!didTheAudoLineFail && (frame.samples != null)) {
@@ -104,9 +99,8 @@ public class FFmpegLoader {
                     }
                 }
             }
-        } finally {
-            grabber.stop();
-            grabber.release();
+        } catch (FrameGrabber.Exception e) {
+            throw new RuntimeException(e);
         }
     }
 }

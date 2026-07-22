@@ -6,10 +6,10 @@ import org.bytedeco.javacv.Frame;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 
+import javax.sound.sampled.LineUnavailableException;
 import java.awt.Dimension;
 
-import static org.bytedeco.ffmpeg.global.avutil.AV_LOG_ERROR;
-import static org.bytedeco.ffmpeg.global.avutil.AV_PIX_FMT_BGR24;
+import static org.bytedeco.ffmpeg.global.avutil.*;
 
 public class FFmpegLoader {
     private static final Logger log = Logger.getInstance();
@@ -56,13 +56,15 @@ public class FFmpegLoader {
 
         FFmpegLogCallback.setLevel(AV_LOG_ERROR);
         FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(path);
+        FFmpegFrameGrabber probe = new FFmpegFrameGrabber(path);
+
+        AudioPlayer player = new AudioPlayer();
 
         try {
-            grabber.setPixelFormat(AV_PIX_FMT_BGR24); // Immer BGR24 liefern
-            grabber.start(); // Start the grabber once to set the Image width and height for the scaling
+            probe.start();
 
-            int originalWidth = grabber.getImageWidth();
-            int originalHeight = grabber.getImageHeight();
+            int originalWidth = probe.getImageWidth();
+            int originalHeight = probe.getImageHeight();
 
             Dimension size = calculateSize(
                     originalWidth,
@@ -71,8 +73,11 @@ public class FFmpegLoader {
                     targetHeight
             );
 
-            grabber.stop();
+            probe.stop();
 
+            grabber.setSampleFormat(AV_SAMPLE_FMT_S16); // Immer 16bit liefern
+            grabber.setPixelFormat(AV_PIX_FMT_BGR24); // Immer BGR24 liefern
+            grabber.setAudioChannels(2); // Immer Stereo liefern
 
             // FFmpeg für das scaling
             grabber.setImageWidth(size.width);
@@ -81,8 +86,23 @@ public class FFmpegLoader {
             grabber.start();
 
             Frame frame;
-            while ((frame = grabber.grabImage()) != null) {
+            boolean didTheAudoLineFail = false;
+            while ((frame = grabber.grab()) != null) {
+                if (frame.image != null) {
                 onFrame.onFrame(frame, grabber.getVideoFrameRate());
+                }
+
+                if (!didTheAudoLineFail && (frame.samples != null)) {
+                    try {
+                        if (!player.isPlaying()) {
+                            player.start(frame);
+                        }
+                        player.play(frame);
+                    } catch (LineUnavailableException e) {
+                        didTheAudoLineFail = true;
+                        log.warn("Failed to create audio line: {}", e.getMessage());
+                    }
+                }
             }
         } finally {
             grabber.stop();

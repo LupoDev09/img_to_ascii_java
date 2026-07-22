@@ -55,8 +55,8 @@ public class FFmpegLoader {
         log.info("Loading video frames from path: %s", path);
 
         FFmpegLogCallback.setLevel(AV_LOG_ERROR);
-        FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(path);
         FFmpegFrameGrabber probe = new FFmpegFrameGrabber(path);
+        FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(path);
 
         AudioPlayer player = new AudioPlayer();
 

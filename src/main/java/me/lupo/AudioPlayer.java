@@ -4,9 +4,10 @@ import org.bytedeco.javacv.Frame;
 import org.jetbrains.annotations.NotNull;
 
 import javax.sound.sampled.*;
+import java.io.Closeable;
 import java.nio.ShortBuffer;
 
-public class AudioPlayer {
+public class AudioPlayer implements Closeable {
 
     private SourceDataLine line;
 
@@ -17,7 +18,6 @@ public class AudioPlayer {
     }
 
     public void start(@NotNull Frame frame) throws LineUnavailableException {
-
         AudioFormat format = new AudioFormat(
                 frame.sampleRate,
                 16,
@@ -34,13 +34,11 @@ public class AudioPlayer {
 
 
     public void play(@NotNull Frame frame) {
-        System.out.println(frame.samples[0].getClass());
         ShortBuffer samples = (ShortBuffer) frame.samples[0];
 
         byte[] audioBytes = new byte[samples.remaining() * 2];
 
         int index = 0;
-
         while(samples.hasRemaining()) {
             short value = samples.get();
 
@@ -58,5 +56,10 @@ public class AudioPlayer {
             line.close();
         }
         playing = false;
+    }
+
+    @Override
+    public void close() {
+        stop();
     }
 }

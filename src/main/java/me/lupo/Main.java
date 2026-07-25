@@ -9,6 +9,7 @@ import org.bytedeco.javacv.Frame;
 import org.jetbrains.annotations.NotNull;
 
 // Everything else
+import java.awt.*;
 import java.io.File;
 
 public class Main implements Runnable {
@@ -138,36 +139,32 @@ public class Main implements Runnable {
                 return;
             }
 
-            int targetWidth = (size.width == null) ? 0 : size.width;
-            int targetHeight = (size.height == null) ? 0 : size.height;
-            log.debug("Width: %d, Height: %d", targetWidth, targetHeight);
+            Dimension targetSize = new Dimension();
+            targetSize.setSize(
+                    (size.width == null) ? 0 : size.width,
+                    (size.height == null) ? 0 : size.height
+            );
 
-            if (targetWidth < 0 || targetHeight < 0) {
+            log.debug(targetSize.toString());
+
+            if (targetSize.width < 0 || targetSize.height < 0) {
                 log.error("Width and height cannot be negative");
                 return;
             }
 
             // === INIT ===
-            renderer = new Renderer(log.isColor(), render.charset);
-            outputWriter = new OutputWriter();
-            outputWriter.setFps(1);
-
-            if (!flags.noOutput) {
-                outputWriter.start();
-            }
-
-
             log.debug("Charset: %s", render.charset);
             renderer = new Renderer(log.isColor(), render.charset);
-            outputWriter = new OutputWriter();
-            outputWriter.setFps(1); // temporärer Default
+            outputWriter = new OutputWriter(1);
+
+            log.debug(renderer.toString());
 
             // Thread starten, falls Ausgabe gewünscht
             if (!flags.noOutput) {
                 outputWriter.start();
             }
 
-            FFmpegLoader.load(input.image.getAbsolutePath(), targetWidth, targetHeight, Main::frameCallback);
+            FFmpegLoader.load(input.image.getAbsolutePath(), targetSize.width, targetSize.height, Main::frameCallback);
         } catch (Exception e) {
             log.error("Unexpected error: %s", e.getMessage());
             log.debug("Stacktrace: %s", (Object) e.getStackTrace());

@@ -98,4 +98,11 @@ public class Renderer {
         int index = luminance * (config.charset.length() - 1) / 255;
         return config.charset.charAt(index);
     }
+
+    @Override
+    public String toString() {
+        return getClass().getSimpleName() +
+                " [useColor=" + config.useColor + "]" +
+                " [charset=" + config.charset + "]";
+    }
 }

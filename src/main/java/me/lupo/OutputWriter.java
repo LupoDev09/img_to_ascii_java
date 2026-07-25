@@ -85,4 +85,9 @@ public class OutputWriter extends Thread implements AutoCloseable {
         log.debug("close got called");
         shutdown();
     }
+
+    @Override
+    public String toString() {
+        return getClass().getSimpleName() + " [fps=" + fps + "]";
+    }
 }

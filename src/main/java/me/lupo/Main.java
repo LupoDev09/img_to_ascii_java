@@ -164,7 +164,7 @@ public class Main implements Runnable {
                 outputWriter.start();
             }
 
-            FFmpegLoader.load(input.image.getAbsolutePath(), targetSize.width, targetSize.height, Main::frameCallback);
+            FFmpegLoader.load(input.image.getAbsolutePath(), targetSize, Main::frameCallback);
         } catch (Exception e) {
             log.error("Unexpected error: %s", e.getMessage());
             log.debug("Stacktrace: %s", (Object) e.getStackTrace());

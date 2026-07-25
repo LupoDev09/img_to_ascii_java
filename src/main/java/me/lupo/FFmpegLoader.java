@@ -19,40 +19,36 @@ public class FFmpegLoader {
         void onFrame(Frame frame, double fps);
     }
 
-    @Contract("_, _, _, _ -> new")
-    private static @NotNull Dimension calculateSize(int originalWidth, int originalHeight, int targetWidth, int targetHeight) {
+    @Contract("_, _ -> new")
+    private static @NotNull Dimension calculateSize(@NotNull Dimension sourceDimensions, @NotNull Dimension targetDimensions) {
         log.debug(
-                "Method calculateSize in FFmpegLoader got called with: originalWidth=%s originalHeight=%s targetWidth=%s targetHeight=%s",
-                originalWidth,
-                originalHeight,
-                targetWidth,
-                targetHeight
+                "Method calculateSize in FFmpegLoader got called with: sourceDimensions=%s targetDimensions=%s",
+                sourceDimensions,
+                targetDimensions
         );
 
         // Terminal characters are roughly twice as high as wide,
         // therefore compensate the height/width calculation.
-        double aspect = (double) originalWidth / originalHeight;
+        double aspect = (double) sourceDimensions.width / sourceDimensions.height;
 
-        if (targetWidth == 0 && targetHeight == 0) {
-            return new Dimension(originalWidth, originalHeight);
+        if (targetDimensions.width == 0 && targetDimensions.height == 0) {
+            return sourceDimensions;
 
-        } else if (targetWidth == 0) {
-            int width = (int) (targetHeight * 2 * aspect);
-            return new Dimension(width, targetHeight);
+        } else if (targetDimensions.width == 0) {
+            int width = (int) (targetDimensions.height * 2 * aspect);
+            return new Dimension(width, targetDimensions.height);
 
-        } else if (targetHeight == 0) {
-            int height = (int) ((targetWidth / aspect) * 0.5);
-            return new Dimension(targetWidth, height);
+        } else if (targetDimensions.height == 0) {
+            int height = (int) ((targetDimensions.width / aspect) * 0.5);
+            return new Dimension(targetDimensions.width, height);
 
         } else {
-            return new Dimension(targetWidth, targetHeight);
+            return targetDimensions;
         }
     }
 
-    public static void load(String path, Integer targetWidth, Integer targetHeight, FrameCallback onFrame) {
-        log.debug("Method load in FFmpegLoader got called with: path=%s targetWidth=%s targetHeight=%s",
-                path, targetWidth, targetHeight);
-
+    public static void load(String path, @NotNull Dimension targetDimensions, FrameCallback onFrame) {
+        log.debug("Method load in FFmpegLoader got called with: path=%s targetDimensions=%s", path, targetDimensions);
         log.info("Loading video frames from path: %s", path);
 
         try (AudioPlayer player = new AudioPlayer();
@@ -62,16 +58,17 @@ public class FFmpegLoader {
 
             probe.start();
 
-            int originalWidth = probe.getImageWidth();
-            int originalHeight = probe.getImageHeight();
+            Dimension sourceDimensions = new Dimension(probe.getImageWidth(), probe.getImageHeight());
+            log.info("Source video dimensions: %dx%d", sourceDimensions.width, sourceDimensions.height);
 
-            Dimension size = calculateSize(originalWidth, originalHeight, targetWidth, targetHeight);
+            Dimension size = calculateSize(sourceDimensions, targetDimensions);
+            log.info("Calculated target dimensions: %dx%d", size.width, size.height);
 
             probe.stop();
 
             grabber.setSampleFormat(AV_SAMPLE_FMT_S16); // Immer 16bit liefern
-            grabber.setPixelFormat(AV_PIX_FMT_BGR24); // Immer BGR24 liefern
-            grabber.setAudioChannels(2); // Immer Stereo liefern
+            grabber.setPixelFormat(AV_PIX_FMT_BGR24);   // Immer BGR24 liefern
+            grabber.setAudioChannels(2);                // Immer Stereo liefern
 
             // FFmpeg für das scaling
             grabber.setImageWidth(size.width);
@@ -80,20 +77,20 @@ public class FFmpegLoader {
             grabber.start();
 
             Frame frame;
-            boolean didTheAudoLineFail = false;
+            boolean didTheAudioLineFail = false;
             while ((frame = grabber.grab()) != null) {
                 if (frame.image != null) {
                     onFrame.onFrame(frame, grabber.getVideoFrameRate());
                 }
 
-                if (!didTheAudoLineFail && (frame.samples != null)) {
+                if (!didTheAudioLineFail && (frame.samples != null)) {
                     try {
                         if (!player.isPlaying()) {
                             player.start(frame);
                         }
                         player.play(frame);
                     } catch (LineUnavailableException e) {
-                        didTheAudoLineFail = true;
+                        didTheAudioLineFail = true;
                         log.warn("Failed to create audio line: {}", e.getMessage());
                     }
                 }
